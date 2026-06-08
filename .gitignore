@@ -1,0 +1,22 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+
+# Exported builds / artifacts
+/build/
+/export/
+*.pck
+*.zip
+*.x86_64
+*.exe
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Secrets / env
+.env
+.env.*
+!.env.example
