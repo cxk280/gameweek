@@ -28,6 +28,11 @@ var _cd := 0.0
 var _cd_last := -1
 var _grace := -1.0
 var _results_t := 0.0
+
+# --- Progression (server-authoritative, persisted) ---
+var current_level := 0
+var board := {}               # str(level_index) -> [{name, ms}] sorted ascending (top 10)
+var wins := {}                # name -> int
 ## Filled after the server is deployed. The browser can't read server env at runtime,
 ## so the web client's server URL is baked here (overridable at runtime via ?server=wss://…).
 const WEB_SERVER_URL := "wss://rooftop-server-production.up.railway.app"
@@ -97,6 +102,7 @@ func _start_server() -> void:
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	is_server = true
+	_load_progress()
 	print("[server] WebSocket server listening on port %d" % _port())
 
 
@@ -243,7 +249,7 @@ func _server_race_tick(delta: float) -> void:
 				if n <= 0:
 					_start_race()
 				else:
-					srv_phase.rpc("countdown", {"n": n})
+					srv_phase.rpc("countdown", {"n": n, "level": current_level})
 		"racing":
 			if _grace >= 0.0:
 				_grace -= delta
@@ -256,7 +262,15 @@ func _server_race_tick(delta: float) -> void:
 
 
 func _lobby_payload() -> Dictionary:
-	return {"readies": readies.duplicate(), "names": _names.duplicate(), "chars": _chars.duplicate()}
+	return {
+		"readies": readies.duplicate(), "names": _names.duplicate(), "chars": _chars.duplicate(),
+		"level": current_level, "level_name": _level_name(current_level),
+		"board": board.get(str(current_level), []), "wins": wins,
+	}
+
+
+func _level_name(idx: int) -> String:
+	return Levels.ALL[idx % Levels.ALL.size()]["name"]
 
 
 func _broadcast_lobby() -> void:
@@ -279,14 +293,22 @@ func _start_race() -> void:
 	phase = "racing"
 	finishers = []
 	_grace = -1.0
-	srv_phase.rpc("racing", {})
-	print("[server] GO — race started")
+	srv_phase.rpc("racing", {"level": current_level})
+	print("[server] GO — race started (level %d: %s)" % [current_level, _level_name(current_level)])
 
 
 func _end_race() -> void:
 	phase = "results"
 	_results_t = RESULTS_TIME
-	srv_phase.rpc("results", {"order": finishers})
+	# Winner gets a win; best times already recorded per-finish.
+	if not finishers.is_empty():
+		var winner: String = finishers[0]["name"]
+		wins[winner] = int(wins.get(winner, 0)) + 1
+	_save_progress()
+	srv_phase.rpc("results", {
+		"order": finishers, "level_name": _level_name(current_level),
+		"board": board.get(str(current_level), []), "wins": wins,
+	})
 	var order := ""
 	for f in finishers:
 		order += " %s(%dms)" % [f["name"], f["ms"]]
@@ -298,8 +320,9 @@ func _reset_lobby() -> void:
 	finishers = []
 	for id in readies:
 		readies[id] = false
+	current_level = (current_level + 1) % Levels.ALL.size()  # rotate course
 	_broadcast_lobby()
-	print("[server] back to lobby")
+	print("[server] back to lobby — next course: %s" % _level_name(current_level))
 
 
 # --- Client API ---
@@ -336,12 +359,52 @@ func submit_finish(ms: int) -> void:
 	for f in finishers:
 		if f["id"] == id:
 			return
-	finishers.append({"id": id, "name": _names.get(id, "p%d" % id), "char": _chars.get(id, "vex"), "ms": ms})
+	var pname: String = _names.get(id, "p%d" % id)
+	finishers.append({"id": id, "name": pname, "char": _chars.get(id, "vex"), "ms": ms})
+	_record_time(pname, ms)
 	srv_phase.rpc("standings", {"order": finishers})
 	if _grace < 0.0:
 		_grace = FINISH_GRACE
 	if finishers.size() >= readies.size():
 		_end_race()
+
+
+func _record_time(pname: String, ms: int) -> void:
+	var key := str(current_level)
+	var arr: Array = board.get(key, [])
+	arr.append({"name": pname, "ms": ms})
+	arr.sort_custom(func(a, b): return int(a["ms"]) < int(b["ms"]))
+	if arr.size() > 10:
+		arr = arr.slice(0, 10)
+	board[key] = arr
+
+
+func _data_path() -> String:
+	var d := OS.get_environment("DATA_DIR")
+	return d.path_join("leaderboard.json") if d != "" else "user://leaderboard.json"
+
+
+func _load_progress() -> void:
+	var p := _data_path()
+	if not FileAccess.file_exists(p):
+		return
+	var f := FileAccess.open(p, FileAccess.READ)
+	if f == null:
+		return
+	var data: Variant = JSON.parse_string(f.get_as_text())
+	if data is Dictionary:
+		board = data.get("board", {})
+		wins = data.get("wins", {})
+		print("[server] loaded leaderboard (%d courses, %d winners)" % [board.size(), wins.size()])
+
+
+func _save_progress() -> void:
+	var f := FileAccess.open(_data_path(), FileAccess.WRITE)
+	if f == null:
+		printerr("[server] could not write leaderboard to %s" % _data_path())
+		return
+	f.store_string(JSON.stringify({"board": board, "wins": wins}))
+	f.close()
 
 
 @rpc("authority", "reliable")

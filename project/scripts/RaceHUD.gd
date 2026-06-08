@@ -12,7 +12,9 @@ const DIM := Color(0.7, 0.72, 0.85)
 var _is_ready := false
 
 var _lobby: Control
+var _lobby_course: Label
 var _lobby_list: VBoxContainer
+var _lobby_board: VBoxContainer
 var _ready_btn: Button
 var _countdown: Label
 var _standings: VBoxContainer
@@ -44,6 +46,8 @@ func hide_all() -> void:
 func show_lobby(payload: Dictionary, my_id: int) -> void:
 	hide_all()
 	_lobby.visible = true
+	_lobby_course.text = "▣ COURSE:  %s" % payload.get("level_name", "—")
+	var wins: Dictionary = payload.get("wins", {})
 	for c in _lobby_list.get_children():
 		c.queue_free()
 	var names: Dictionary = payload.get("names", {})
@@ -52,12 +56,43 @@ func show_lobby(payload: Dictionary, my_id: int) -> void:
 		var row := Label.new()
 		var mark := "●" if readies.get(id, false) else "○"
 		var you := "  (you)" if int(id) == my_id else ""
-		row.text = "%s  %s%s" % [mark, names[id], you]
+		var nm := str(names[id])
+		var wn := int(wins.get(nm, 0))
+		var badge := "   ★%d" % wn if wn > 0 else ""
+		row.text = "%s  %s%s%s" % [mark, nm, you, badge]
 		row.add_theme_color_override("font_color", CYAN if readies.get(id, false) else DIM)
 		_lobby_list.add_child(row)
 	_is_ready = bool(readies.get(my_id, false))
 	_ready_btn.text = "CANCEL" if _is_ready else "READY UP"
 	_ready_btn.add_theme_color_override("font_color", GOLD if _is_ready else Color.WHITE)
+	for c in _lobby_board.get_children():
+		c.queue_free()
+	_fill_board(_lobby_board, payload.get("board", []))
+
+
+func _fill_board(target: VBoxContainer, b: Array) -> void:
+	var head := Label.new()
+	head.text = "— BEST TIMES —"
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	head.add_theme_color_override("font_color", CYAN)
+	target.add_child(head)
+	if b.is_empty():
+		var none := Label.new()
+		none.text = "no times yet — set one!"
+		none.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		none.add_theme_color_override("font_color", DIM)
+		target.add_child(none)
+		return
+	var place := 0
+	for e in b:
+		place += 1
+		if place > 5:
+			break
+		var row := Label.new()
+		row.text = "%d. %s   %s" % [place, e["name"], _fmt(int(e["ms"]))]
+		row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		row.add_theme_color_override("font_color", DIM)
+		target.add_child(row)
 
 
 func show_countdown(n: int) -> void:
@@ -94,11 +129,17 @@ func update_standings(order: Array, my_id: int) -> int:
 	return my_place
 
 
-func show_results(order: Array, my_id: int) -> void:
+func show_results(payload: Dictionary, my_id: int) -> void:
 	hide_all()
 	_results.visible = true
+	var order: Array = payload.get("order", [])
 	for c in _results_list.get_children():
 		c.queue_free()
+	var head := Label.new()
+	head.text = payload.get("level_name", "RESULTS")
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	head.add_theme_color_override("font_color", GOLD)
+	_results_list.add_child(head)
 	var place := 0
 	for f in order:
 		place += 1
@@ -113,6 +154,10 @@ func show_results(order: Array, my_id: int) -> void:
 		none.text = "No finishers"
 		none.add_theme_color_override("font_color", DIM)
 		_results_list.add_child(none)
+	var spacer := Label.new()
+	spacer.text = " "
+	_results_list.add_child(spacer)
+	_fill_board(_results_list, payload.get("board", []))
 
 
 func toast(text: String, color: Color) -> void:
@@ -131,6 +176,11 @@ func _build_lobby() -> void:
 	box.add_theme_constant_override("separation", 14)
 	_center(_lobby, box)
 	_title(box, "LOBBY")
+	_lobby_course = Label.new()
+	_lobby_course.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_lobby_course.add_theme_font_size_override("font_size", 20)
+	_lobby_course.add_theme_color_override("font_color", GOLD)
+	box.add_child(_lobby_course)
 	_lobby_list = VBoxContainer.new()
 	_lobby_list.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_child(_lobby_list)
@@ -144,6 +194,8 @@ func _build_lobby() -> void:
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_color_override("font_color", DIM)
 	box.add_child(hint)
+	_lobby_board = VBoxContainer.new()
+	box.add_child(_lobby_board)
 
 
 func _build_countdown() -> void:

@@ -21,6 +21,7 @@ var _racing := false         # true between GO and results
 var _race_hud: RaceHUD = null
 var _racebot := false        # headless test: auto-play + auto-ready in the race
 var _racebot_readied := false
+var _current_level := -1
 
 @onready var level: Level = $Level
 @onready var players: Node2D = $Players
@@ -36,10 +37,9 @@ func _ready() -> void:
 	Net.players_updated.connect(_on_players_updated)
 	if Net.is_server:
 		return
-	level.load_level(Levels.LEVEL_1)
 	level.checkpoint_reached.connect(_on_checkpoint)
 	level.finish_reached.connect(_on_finish)
-	Net.local_pos = level.start_pos
+	_ensure_level(0)
 	_build_skyline()
 	banner.text = ""
 	if _racebot:
@@ -73,6 +73,11 @@ func _on_character_chosen(char_id: String) -> void:
 
 
 func _on_race_event(phase: String, payload: Dictionary) -> void:
+	# Load the rotated course + apply win-based cosmetic trail before phase handling.
+	if payload.has("level"):
+		_ensure_level(int(payload["level"]))
+	if payload.has("wins") and _local:
+		_local.set_win_tier(int((payload["wins"] as Dictionary).get(Net.local_name, 0)))
 	match phase:
 		"lobby":
 			_racing = false
@@ -121,7 +126,24 @@ func _on_race_event(phase: String, payload: Dictionary) -> void:
 			if _local:
 				_local.input_enabled = false
 			if _race_hud:
-				_race_hud.show_results(payload.get("order", []), Net.my_id)
+				_race_hud.show_results(payload, Net.my_id)
+
+
+func _ensure_level(idx: int) -> void:
+	if idx == _current_level:
+		return
+	_current_level = idx
+	level.load_level(Levels.ALL[idx % Levels.ALL.size()])
+	Net.local_pos = level.start_pos
+	if _local:
+		_reset_to_start()
+
+
+func _apply_progress(payload: Dictionary) -> void:
+	_ensure_level(int(payload.get("level", 0)))
+	if _local:
+		var w: Dictionary = payload.get("wins", {})
+		_local.set_win_tier(int(w.get(Net.local_name, 0)))
 
 
 func _reset_to_start() -> void:

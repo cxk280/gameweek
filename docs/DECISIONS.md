@@ -64,4 +64,20 @@ ADR-style log of the load-bearing technical decisions. Newest context at top of 
 
 **Decision.** A 2D side-scrolling platformer race: 2–8 players race through obstacle-course levels to a finish line.
 
-**Why.** Satisfies the spec two ways — discrete tracks = "levels", unlock chain + best-times + cosmetics = "character progression". A **race** is the most forgiving multiplayer genre over a TCP transport (sync positions, not twitch hit-detection physics), and "first to the finish" is instantly readable and fun to demo. Art via Kenney.nl CC0 packs to stay polished without an art time-sink.
+**Why.** Satisfies the spec two ways — discrete tracks = "levels", unlock chain + best-times + cosmetics = "character progression". A **race** is the most forgiving multiplayer genre over a TCP transport (sync positions, not twitch hit-detection physics), and "first to the finish" is instantly readable and fun to demo. Original hand-authored pixel art (see D8) instead of asset packs, to keep characters unique.
+
+---
+
+## D7 — Progression & persistence
+
+**Decision.** Server rotates through the course list each race; a per-course **best-time leaderboard** and per-player **win counts** are tracked server-side and persisted to JSON on a **Railway volume** mounted at `/data` (path from `DATA_DIR`, falls back to `user://` locally). Wins drive a **cosmetic trail tier** (3 wins → gold, 10 → magenta).
+
+**Why.** Progression must be authoritative and shared (one leaderboard everyone sees), so it lives on the server next to the race state machine. Railway container filesystems are ephemeral across deploys, so a volume is required for the leaderboard to survive redeploys. JSON + a single file is plenty at this scale (no DB needed).
+
+---
+
+## D8 — Original pixel art via palette grids (no image generator)
+
+**Decision.** Characters are hand-authored as palette-indexed text grids (`CharacterArt.gd`) rendered to textures at runtime (`SpriteFactory.gd`); all runners share one body geometry with unique heads/palettes.
+
+**Why.** No image-generation tool is available in the build environment, and the brief wants art *unique to the game*. Authoring grids in code makes every pixel original, and `tools/render_preview.gd` renders a PNG sheet for inspection — closing the loop of authoring art without a running display. Shared body + per-character head keeps a 5-runner roster cheap while preserving distinct silhouettes.

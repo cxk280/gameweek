@@ -59,6 +59,15 @@ func setup(pname: String, _color: Color, level: Level, char_id: String) -> void:
 	_apply_camera_limits()
 
 
+## Cosmetic unlock: brighter trail as you rack up wins.
+func set_win_tier(w: int) -> void:
+	if w >= 10:
+		_trail_accent = Color(1.0, 0.3, 0.85)   # magenta (10+ wins)
+	elif w >= 3:
+		_trail_accent = Color(1.0, 0.85, 0.2)    # gold (3+ wins)
+	# else keep the character's own accent
+
+
 func _apply_camera_limits() -> void:
 	if _level == null:
 		return

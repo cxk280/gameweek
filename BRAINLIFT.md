@@ -144,4 +144,28 @@ Day 5: progression — level unlock chain, persisted best-time leaderboard, cosm
 
 ---
 
+## Day 5 — Jun 8 · Progression: rotation, leaderboard, unlocks
+
+### Goal
+Give players a reason to keep racing: course rotation, persistent best times, and something to earn.
+
+### What happened
+- **Course rotation**: the server advances through the course list each race and broadcasts the index; clients load the matching course. Both courses (Neon Rooftops, Spire Climb) are now in rotation and confirmed completable.
+- **Persistent best-time leaderboard + win counts**: server records per-course top-10 times and per-player wins, persisted as JSON to a **Railway volume** at `/data` so it survives redeploys. Shown in the lobby (course + best times + ★win badges) and on the results screen.
+- **Cosmetic unlock**: win count upgrades your dash-trail colour (gold at 3, magenta at 10).
+- Performance review: 20 Hz full-state snapshots + client interpolation is comfortably within budget for the target player count; ghosts stay smooth. No bottleneck to chase yet.
+
+### AI prompts / techniques that worked
+- Reused the **`--racebot` harness** to validate the whole progression loop headlessly: two bots raced repeatedly and I watched the server rotate courses, record times, and write the leaderboard JSON — then inspected the file to confirm structure. Same harness, new feature, near-zero extra cost.
+
+### Challenges / fixes
+- **Nearly shipped stale binaries.** I changed code, ran the headless test (which uses the *editor* binary), added the volume, and redeployed — but forgot to re-*export* the Linux/Web builds first. The deployed server's old log format (`GO — race started` with no course name) exposed it. Re-exported both and redeployed. Lesson baked into the deploy checklist: **export is a separate step from test; always re-export before `railway up`.**
+- `railway volume add` attached to the wrong (last-linked) service; had to link `rooftop-server` explicitly with `--project`, delete the stray volume, and re-add.
+- `var ready`-style name clash avoided this time by checking against Node members first.
+
+### Next
+Day 6: polish + stress test — menus/UX pass, juice, ~8-player concurrency test, balance, capture demo clips.
+
+---
+
 <!-- New day entries go above this line, newest at top of the day list or appended in order — keep daily. -->
