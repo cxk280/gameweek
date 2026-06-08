@@ -96,4 +96,28 @@ Day 4: real multiplayer race loop — lobby/ready/countdown, server-authoritativ
 
 ---
 
+## Day 3 (cont.) — Jun 8 · Art direction approved → full roster, clearer checkpoints, longer course
+
+### From playtest feedback
+- Jump/run/gaps: confirmed good (left untouched). Dash: "pointless" → reworked + now matters. Art direction: approved → built the roster. Checkpoints: "took a while to figure out what they were" → redesigned. Asked for longer, more varied courses → delivered a 2× level + a 2nd course.
+
+### What happened
+- **Full roster (5 runners)** via the PNG-preview loop: Vex (courier), Glitch (netrunner, hood+goggles), Echo (android, antenna+amber eyes), Kira (street samurai, topknot+mask), Pax (drone-rider, helmet+scarf). Shared body geometry + unique heads/palettes → distinct silhouettes at low cost. Live select screen shows real sprite previews.
+- **Checkpoints made unmistakable**: a tall pulsing light-beam + gate posts + a floating "CHECKPOINT" label, and an activation flash to "✓ CLEARED". (Old version was a thin bar — easy to miss.)
+- **Course ~2× longer + varied**: Level 1 is now 9k px, 21 platforms, 5 checkpoints, varying gaps/heights + pit-spike hazards; rooftop props (antennas, vents, neon signs) for detail; stars + a moon in the sky. Added a 2nd course ("Spire Climb") in data for the progression work.
+- **Dash now has purpose**: air-dash + momentum + neon afterimage trail; great for speed/recovery (kept the main path jump-fair so it never hard-walls anyone).
+
+### AI prompts / techniques that worked
+- **The render-to-PNG-and-Read loop is the unlock for authoring art without a display.** I draw sprites as palette grids, render a sheet, and actually look at it — iterating Vex from "blobby box-replacement" to a detailed runner, then stamping 4 more from a shared body. Authoring blind would've been hopeless; this made it a tight loop.
+- **The autopilot doubles as a level-design oracle.** When it looped forever at one checkpoint, that *was* the finding: a gap there required a mechanic (dash) the main path shouldn't demand. I re-spaced the course to be jump-fair and the bot completed it in 25s — proof the longer level is winnable.
+
+### Challenges / fixes
+- Teaching the autopilot to dash made it *less* stable (overfitting the test bot). Right call was to fix the *level* (jump-fair spacing), not the bot — keeps dash a bonus, not a wall.
+- Hand-placing 21 platforms drifted into unjumpable gaps; recomputed with controlled spacing (gaps ≤170, rises ≤60) and re-validated with the autopilot.
+
+### Next
+Day 4: real multiplayer race loop — lobby/ready/countdown, server-authoritative finish order, everyone racing the same course live.
+
+---
+
 <!-- New day entries go above this line, newest at top of the day list or appended in order — keep daily. -->

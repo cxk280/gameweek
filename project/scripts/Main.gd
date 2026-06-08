@@ -121,8 +121,55 @@ func _build_skyline() -> void:
 	var pb := ParallaxBackground.new()
 	add_child(pb)
 	move_child(pb, 0)
+	_add_stars(pb)
+	_add_moon(pb)
 	_add_sky_layer(pb, 0.2, Color(0.05, 0.05, 0.13), 70, 7)
 	_add_sky_layer(pb, 0.45, Color(0.08, 0.06, 0.18), 130, 11)
+
+
+func _add_stars(pb: ParallaxBackground) -> void:
+	var layer := ParallaxLayer.new()
+	layer.motion_scale = Vector2(0.08, 0.08)
+	pb.add_child(layer)
+	for i in range(180):
+		var sx := float((i * 167) % int(bounds_w()))
+		var sy := float((i * 89) % 380)
+		var s := ColorRect.new()
+		var b := 0.5 + float(i % 5) * 0.1
+		s.size = Vector2(2, 2)
+		s.position = Vector2(sx, sy)
+		s.color = Color(b, b, b * 1.1, 0.9)
+		layer.add_child(s)
+
+
+func _add_moon(pb: ParallaxBackground) -> void:
+	var layer := ParallaxLayer.new()
+	layer.motion_scale = Vector2(0.04, 0.04)
+	pb.add_child(layer)
+	var glow := _disc(70.0, Color(0.7, 0.8, 1.0, 0.10))
+	glow.position = Vector2(960, 150)
+	layer.add_child(glow)
+	var moon := _disc(46.0, Color(0.86, 0.9, 0.98, 1.0))
+	moon.position = Vector2(960, 150)
+	layer.add_child(moon)
+	var crater := _disc(40.0, Color(0.80, 0.85, 0.95, 1.0))
+	crater.position = Vector2(972, 142)
+	layer.add_child(crater)
+
+
+func _disc(radius: float, color: Color) -> Polygon2D:
+	var poly := PackedVector2Array()
+	for a in range(20):
+		var ang := TAU * float(a) / 20.0
+		poly.append(Vector2(cos(ang), sin(ang)) * radius)
+	var p := Polygon2D.new()
+	p.polygon = poly
+	p.color = color
+	return p
+
+
+func bounds_w() -> float:
+	return maxf(level.bounds.size.x, 1.0)
 
 
 func _add_sky_layer(pb: ParallaxBackground, scale: float, color: Color, seedn: int, count: int) -> void:

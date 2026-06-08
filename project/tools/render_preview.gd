@@ -9,13 +9,20 @@ func _init() -> void:
 	var pad := 8
 	var bg := Color8(20, 18, 30)
 
+	var only_idle := not OS.get_cmdline_user_args().has("--all")
 	var imgs: Array = []
 	var roster := CharacterArt.roster()
 	for id in roster:
 		var cd: Dictionary = roster[id]
-		for anim in cd["frames"]:
-			for grid in cd["frames"][anim]:
-				imgs.append(SpriteFactory.make_image(grid, cd["palette"]))
+		if only_idle:
+			# Roster lineup: idle + run1 + jump per character.
+			imgs.append(SpriteFactory.make_image(cd["frames"]["idle"][0], cd["palette"]))
+			imgs.append(SpriteFactory.make_image(cd["frames"]["run"][0], cd["palette"]))
+			imgs.append(SpriteFactory.make_image(cd["frames"]["jump"][0], cd["palette"]))
+		else:
+			for anim in cd["frames"]:
+				for grid in cd["frames"][anim]:
+					imgs.append(SpriteFactory.make_image(grid, cd["palette"]))
 
 	var maxh := 1
 	var total_w := pad

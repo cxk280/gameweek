@@ -1,30 +1,89 @@
 extends Node
 class_name Levels
-## Data-driven level definitions. Each level is plain data; Level.gd builds the geometry,
-## checkpoints and finish from it. Adding a level (Day 5) = adding a dictionary here.
-##
-## Platforms are Rect2(x, y, w, h) with y = top surface. Coordinates grow right/down.
+## Data-driven level definitions. Level.gd builds geometry, props, hazards, checkpoints and
+## finish from this. Adding a course = adding a dictionary. Platforms are Rect2(x, y, w, h)
+## with y = top surface; coordinates grow right/down. Keep gaps <= ~210px and up-steps
+## <= ~120px so the jump (≈120px height, ≈270px air distance) clears them.
 
 const LEVEL_1 := {
 	"name": "Neon Rooftops",
-	"start": Vector2(120, 500),
-	"finish": Vector2(4320, 540),
-	"bounds": Rect2(-200, 0, 5000, 900),
+	"start": Vector2(120, 520),
+	"finish": Vector2(8760, 520),
+	"bounds": Rect2(-200, 0, 9600, 900),
 	"platforms": [
-		Rect2(0, 560, 620, 240),
-		Rect2(780, 560, 380, 240),
-		Rect2(1320, 480, 360, 320),
-		Rect2(1850, 540, 300, 260),
-		Rect2(2300, 460, 320, 340),
-		Rect2(2780, 560, 380, 240),
-		Rect2(3350, 500, 300, 300),
-		Rect2(3820, 560, 820, 240),
+		Rect2(0, 580, 560, 260),
+		Rect2(720, 560, 360, 280),
+		Rect2(1240, 520, 220, 320),
+		Rect2(1610, 560, 200, 280),
+		Rect2(1970, 500, 200, 340),
+		Rect2(2330, 560, 160, 280),
+		Rect2(2650, 510, 160, 330),
+		Rect2(2970, 470, 180, 370),
+		Rect2(3320, 560, 440, 280),
+		Rect2(3920, 500, 200, 340),
+		Rect2(4280, 450, 200, 390),
+		Rect2(4640, 520, 180, 320),
+		Rect2(4980, 560, 520, 280),
+		Rect2(5660, 500, 200, 340),
+		Rect2(6020, 450, 180, 390),
+		Rect2(6360, 520, 180, 320),
+		Rect2(6700, 560, 220, 280),
+		Rect2(7090, 500, 200, 340),
+		Rect2(7450, 560, 240, 280),
+		Rect2(7850, 520, 200, 320),
+		Rect2(8210, 560, 820, 280),
+	],
+	"hazards": [
+		Rect2(2210, 800, 120, 24),
+		Rect2(5540, 800, 120, 24),
+		Rect2(6940, 800, 150, 24),
 	],
 	"checkpoints": [
-		Vector2(1500, 480),
-		Vector2(2460, 460),
-		Vector2(3500, 500),
+		Vector2(1700, 560),
+		Vector2(3060, 470),
+		Vector2(4730, 520),
+		Vector2(6450, 520),
+		Vector2(7570, 560),
 	],
 }
 
-const ALL := [LEVEL_1]
+const LEVEL_2 := {
+	"name": "Spire Climb",
+	"start": Vector2(120, 600),
+	"finish": Vector2(6760, 360),
+	"bounds": Rect2(-200, 0, 7400, 960),
+	"platforms": [
+		Rect2(0, 660, 480, 300),
+		Rect2(640, 620, 200, 340),
+		Rect2(980, 560, 160, 400),
+		Rect2(1300, 600, 180, 360),
+		Rect2(1640, 540, 160, 420),
+		Rect2(1960, 600, 160, 360),
+		Rect2(2280, 540, 160, 420),
+		Rect2(2600, 480, 180, 480),
+		Rect2(2960, 560, 420, 400),
+		Rect2(3560, 500, 160, 460),
+		Rect2(3880, 440, 160, 520),
+		Rect2(4200, 500, 160, 460),
+		Rect2(4520, 440, 160, 520),
+		Rect2(4840, 400, 180, 560),
+		Rect2(5200, 460, 160, 500),
+		Rect2(5520, 400, 160, 560),
+		Rect2(5840, 360, 180, 600),
+		Rect2(6200, 420, 160, 540),
+		Rect2(6520, 420, 560, 540),
+	],
+	"hazards": [
+		Rect2(840, 920, 140, 24),
+		Rect2(3380, 920, 180, 24),
+	],
+	"checkpoints": [
+		Vector2(1720, 540),
+		Vector2(2690, 480),
+		Vector2(3960, 440),
+		Vector2(4930, 400),
+		Vector2(5930, 360),
+	],
+}
+
+const ALL := [LEVEL_1, LEVEL_2]
