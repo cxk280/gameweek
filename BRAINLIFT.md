@@ -49,6 +49,7 @@ Get the riskiest thing — a real-time multiplayer slice — **deployed and reac
 - Verified the whole sync path **headlessly** first: server + two `--bot` clients, each logging the *other's changing position*. No browser needed to prove correctness.
 - **Exported** a Linux dedicated-server binary + a single-threaded Web client (`export_presets.cfg`), wrapped the server in Docker, and **deployed both to Railway** as two services.
 - **End-to-end proof over the public internet:** pointed two local clients at `wss://rooftop-server-production.up.railway.app` → they connected through Railway's TLS edge and synced each other's movement. Web client serves over HTTPS (wasm/js/pck all 200).
+- **Human-verified in-browser:** two real browser tabs each rendered both players' squares moving live. Gate passed by eye, not just by logs. (UX note for Day 6: one connected client correctly shows one square — worth a "waiting for players / share this link" hint so it doesn't read as "broken".)
 
 ### AI prompts / techniques that worked
 - _"Railway gives no UDP and terminates TLS at the edge — what exactly does my Godot WS server bind, and how does the browser reach it?"_ → the `wss://` (client) vs plain `ws://`+`$PORT` (server) split, which made the deploy work first try on the networking layer.
