@@ -5,6 +5,7 @@ extends Node2D
 
 const GhostScene := preload("res://scenes/Player.tscn")
 const LocalScene := preload("res://scenes/player/LocalPlayer.tscn")
+const SelectScene := preload("res://scenes/CharacterSelect.tscn")
 
 var _ghosts := {}            # peer_id -> ghost Node2D (remotes only)
 var _local: LocalPlayer = null
@@ -31,15 +32,28 @@ func _ready() -> void:
 	level.finish_reached.connect(_on_finish)
 	Net.local_pos = level.start_pos
 	_build_skyline()
-	_spawn_local()
 	banner.text = ""
+	if _auto:
+		Net.local_char = CharacterArt.ids()[0]
+		_spawn_local()
+	else:
+		var select := SelectScene.instantiate()
+		add_child(select)
+		select.chosen.connect(_on_character_chosen)
+
+
+func _on_character_chosen(char_id: String) -> void:
+	Net.local_char = char_id
+	if Net.is_connected:
+		Net.register.rpc_id(1, Net.local_name, Net.local_color, char_id)
+	_spawn_local()
 
 
 func _spawn_local() -> void:
 	_local = LocalScene.instantiate()
 	players.add_child(_local)
 	_local.global_position = level.start_pos
-	_local.setup(Net.local_name, Net.local_color, level)
+	_local.setup(Net.local_name, Net.local_color, level, Net.local_char)
 
 
 func _physics_process(delta: float) -> void:
@@ -62,12 +76,6 @@ func _physics_process(delta: float) -> void:
 	info.text = "%s · players=%d · ping=%dms" % [Net.local_name, 1 + _ghosts.size(), Net.rtt_ms]
 
 
-func _process(delta: float) -> void:
-	for id in _ghosts:
-		var g: Node2D = _ghosts[id]
-		g.position = g.position.lerp(g.target, clampf(delta * 12.0, 0.0, 1.0))
-
-
 func _on_players_updated(states: Dictionary) -> void:
 	for id in states:
 		if id == Net.my_id:
@@ -76,7 +84,7 @@ func _on_players_updated(states: Dictionary) -> void:
 		if not _ghosts.has(id):
 			var g := GhostScene.instantiate()
 			players.add_child(g)
-			g.setup(str(s["name"]), s["color"], false)
+			g.setup(str(s["name"]), s["color"], str(s.get("char", "vex")))
 			g.position = s["pos"]
 			g.target = s["pos"]
 			_ghosts[id] = g

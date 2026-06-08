@@ -29,6 +29,7 @@ var states := {}
 var local_pos := Vector2(640, 360)
 var local_name := "player"
 var local_color := Color.WHITE
+var local_char := "vex"
 
 var _accum := 0.0
 var _ping_accum := 0.0
@@ -152,7 +153,7 @@ func _on_connected() -> void:
 	is_connected = true
 	my_id = multiplayer.get_unique_id()
 	print("[client] connected id=%d" % my_id)
-	register.rpc_id(1, local_name, local_color)
+	register.rpc_id(1, local_name, local_color, local_char)
 
 
 func _on_connection_failed() -> void:
@@ -169,9 +170,9 @@ func _on_server_disconnected() -> void:
 # --- RPCs (defined on both ends; routed by the /root/Net path) ---
 
 @rpc("any_peer", "reliable")
-func register(pname: String, color: Color) -> void:
+func register(pname: String, color: Color, char_id: String) -> void:
 	var id := multiplayer.get_remote_sender_id()
-	states[id] = {"pos": Vector2.ZERO, "name": pname, "color": color}
+	states[id] = {"pos": Vector2.ZERO, "name": pname, "color": color, "char": char_id}
 
 
 @rpc("any_peer", "unreliable_ordered")
@@ -180,7 +181,7 @@ func submit_state(pos: Vector2) -> void:
 	if states.has(id):
 		states[id]["pos"] = pos
 	else:
-		states[id] = {"pos": pos, "name": "p%d" % id, "color": Color.WHITE}
+		states[id] = {"pos": pos, "name": "p%d" % id, "color": Color.WHITE, "char": "vex"}
 
 
 @rpc("authority", "unreliable_ordered")
