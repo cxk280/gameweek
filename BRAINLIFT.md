@@ -69,4 +69,31 @@ Day 3: real player controller (run/jump/coyote/dash, *feels good*) + Level 1 (Ti
 
 ---
 
+## Day 3 — Jun 8 · Player controller + Level 1 (Neon Rooftops)
+
+### Goal
+Turn "synced squares" into a game that *feels* like something: a real platformer controller and a playable rooftop course, in a neon-night look.
+
+### What happened
+- **Player controller** (`LocalPlayer`, `CharacterBody2D`): run with accel/friction, variable-height jump, **coyote time**, **jump buffering**, and a **dash** — the standard "feels good" platformer kit. Only the local peer simulates physics; remotes stay interpolated ghosts (clean split).
+- **Data-driven levels**: `Levels.gd` holds level data, `Level.gd` builds platforms (neon-edged), checkpoint pylons, and a finish gate with proper collision layers (1=players, 2=solid). Adding levels later is just more data.
+- **Neon-rooftops-at-night** look: deep-navy sky, parallax skyline with lit windows, glowing platform edges.
+- Race timer, checkpoint respawn, finish banner, `R` to restart. Redeployed.
+
+### AI prompts / techniques that worked
+- **Built an edge-detecting autopilot (`--auto`) to validate gameplay headlessly.** Since "does it play?" normally needs a human + a window, I gave the bot a forward floor-raycast so it jumps *at* gaps — then ran it headless and watched it complete the course (3 checkpoints in order → finish in 12.3s). This is the day's best trick: **a self-driving test that proves the level is completable and the controller/collision/checkpoints/finish all fire, with no display.**
+- Set up the InputMap **in code** (`InputMap.add_action`) instead of hand-authoring `InputEventKey` blobs in `project.godot` — far less error-prone when you can't use the editor.
+
+### Challenges / fixes
+- **Autopilot kept missing the first gap.** Root cause was a great bug to find headlessly: the autopilot's look-ahead `RayCast2D` used the default `collision_mask=1`, but platforms are on layer 2 — so the ray never saw floor, the bot hopped constantly and never built speed to clear a gap. Set the ray mask to 2 → it ran the course cleanly. (Reminder: ray masks are independent of body masks.)
+- Avoided multi-line GDScript lambdas in `Area2D.connect(...)` — used named methods with `.bind()` for checkpoint/finish callbacks.
+
+### Can't self-verify
+- **"Feels good to play" is the one graded quality I can't measure headlessly.** Jump weight, run speed, dash, gap spacing — these need a human. Handing to playtest.
+
+### Next
+Day 4: real multiplayer race loop — lobby/ready/countdown, server-authoritative finish order, everyone racing the same level live.
+
+---
+
 <!-- New day entries go above this line, newest at top of the day list or appended in order — keep daily. -->
