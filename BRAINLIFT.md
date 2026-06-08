@@ -120,4 +120,28 @@ Day 4: real multiplayer race loop — lobby/ready/countdown, server-authoritativ
 
 ---
 
+## Day 4 — Jun 8 · Server-authoritative race loop
+
+### Goal
+Turn "everyone running the same level" into an actual race: lobby → ready → synced countdown → race → server-decided finish order → results → repeat.
+
+### What happened
+- **Server-authoritative state machine** in `Net.gd` (`lobby → countdown → racing → results`): ready-up, countdown that starts when all are ready, a synced GO, finish-order by server receipt with a post-first-finisher grace window, results, auto-return to lobby. Late-join spectates; disconnects handled.
+- **Client race UI** (`RaceHUD`): lobby with live player/ready list + a Ready button, big synced countdown, a live finished-standings list, and a medal results screen. Players are frozen during countdown (input lock) and reset to the start line on GO.
+- Free-run fallback when offline (single-player time trial) so the game still works if the server is down.
+- Re-deployed **both** services (the server gained the race brain) and verified the loop **live over wss://** on Railway.
+
+### AI prompts / techniques that worked
+- **Built a `--racebot` to test the whole multiplayer loop headlessly** — a bot that connects, auto-readies, respects the countdown freeze, runs the course, and reports its finish. Two of them against a server reproduced the full cycle and printed a server-authoritative finish order — no browser needed to validate netcode this complex.
+- Validated **in production too**: pointed the racebots at the deployed `wss://` server and watched Railway logs show `ready → GO → results → lobby`. Catches anything that only breaks through the real edge proxy.
+
+### Challenges / fixes
+- **`var ready` collided with Node's built-in `ready` signal** → parse error. Renamed to `readies` with a word-boundary regex so `set_ready`/`send_ready` were untouched.
+- **Ready-storm feedback loop**: the racebot auto-readied on *every* lobby broadcast, and the server re-broadcast lobby on every ready → infinite loop, 85MB of socket-overflow errors in seconds. Fixed both ends: bot readies once per lobby; server dedupes unchanged ready states. Good reminder that broadcast-on-change needs an actual change guard.
+
+### Next
+Day 5: progression — level unlock chain, persisted best-time leaderboard, cosmetic unlocks; plus the 2nd course wired into rotation; performance pass.
+
+---
+
 <!-- New day entries go above this line, newest at top of the day list or appended in order — keep daily. -->

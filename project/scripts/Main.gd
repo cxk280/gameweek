@@ -1,11 +1,13 @@
 extends Node2D
 ## Game scene: builds the level, spawns the local player (full physics) + remote ghosts
-## (interpolated), follows with the camera, and runs the single-player race timer/respawn.
-## Multiplayer race logic (finish order, server-authoritative checkpoints) lands Day 4.
+## (interpolated), follows the camera, runs the race timer, and drives the multiplayer race
+## loop (lobby/countdown/race/results) off Net's server-authoritative phase events. When not
+## connected to a server it falls back to free-run (single-player time trial).
 
 const GhostScene := preload("res://scenes/Player.tscn")
 const LocalScene := preload("res://scenes/player/LocalPlayer.tscn")
 const SelectScene := preload("res://scenes/CharacterSelect.tscn")
+const COUNTDOWN_FALLBACK := 3
 
 var _ghosts := {}            # peer_id -> ghost Node2D (remotes only)
 var _local: LocalPlayer = null
@@ -14,6 +16,11 @@ var _timing := false
 var _finished := false
 var _auto := false
 var _log_accum := 0.0
+var _race_mode := false      # true when connected to a server (drives lobby/countdown/race)
+var _racing := false         # true between GO and results
+var _race_hud: RaceHUD = null
+var _racebot := false        # headless test: auto-play + auto-ready in the race
+var _racebot_readied := false
 
 @onready var level: Level = $Level
 @onready var players: Node2D = $Players
@@ -23,7 +30,9 @@ var _log_accum := 0.0
 
 
 func _ready() -> void:
-	_auto = OS.get_cmdline_user_args().has("--auto")
+	var args := OS.get_cmdline_user_args()
+	_racebot = args.has("--racebot")
+	_auto = args.has("--auto") or _racebot
 	Net.players_updated.connect(_on_players_updated)
 	if Net.is_server:
 		return
@@ -33,7 +42,13 @@ func _ready() -> void:
 	Net.local_pos = level.start_pos
 	_build_skyline()
 	banner.text = ""
-	if _auto:
+	if _racebot:
+		# Headless race participant: drive the race flow, auto-ready on lobby.
+		Net.local_char = CharacterArt.ids()[0]
+		_race_mode = true
+		Net.race_event.connect(_on_race_event)
+		_spawn_local()
+	elif _auto:
 		Net.local_char = CharacterArt.ids()[0]
 		_spawn_local()
 	else:
@@ -44,9 +59,79 @@ func _ready() -> void:
 
 func _on_character_chosen(char_id: String) -> void:
 	Net.local_char = char_id
-	if Net.is_connected:
+	_race_mode = Net.is_connected
+	if _race_mode:
+		# Re-register with the chosen character; the server replies with the current phase.
 		Net.register.rpc_id(1, Net.local_name, Net.local_color, char_id)
+		_race_hud = RaceHUD.new()
+		add_child(_race_hud)
+		_race_hud.ready_pressed.connect(func(r: bool): Net.send_ready(r))
+		Net.race_event.connect(_on_race_event)
 	_spawn_local()
+	if not _race_mode:
+		banner.text = ""
+
+
+func _on_race_event(phase: String, payload: Dictionary) -> void:
+	match phase:
+		"lobby":
+			_racing = false
+			_finished = false
+			_timing = false
+			_race_time = 0.0
+			banner.text = ""
+			_reset_to_start()
+			if _local:
+				_local.input_enabled = true
+			if _race_hud:
+				_race_hud.show_lobby(payload, Net.my_id)
+			if _racebot and not _racebot_readied:
+				_racebot_readied = true
+				Net.send_ready(true)
+		"countdown":
+			_racing = false
+			_finished = false
+			_timing = false
+			_race_time = 0.0
+			banner.text = ""
+			_reset_to_start()
+			if _local:
+				_local.input_enabled = false
+			if _race_hud:
+				_race_hud.show_countdown(int(payload.get("n", COUNTDOWN_FALLBACK)))
+		"racing":
+			_racing = true
+			_finished = false
+			_timing = true
+			_race_time = 0.0
+			banner.text = ""
+			_reset_to_start()
+			if _local:
+				_local.input_enabled = true
+			if _race_hud:
+				_race_hud.start_racing()
+		"standings":
+			if _race_hud:
+				var place := _race_hud.update_standings(payload.get("order", []), Net.my_id)
+				if _finished and place > 0:
+					_race_hud.toast("You finished P%d" % place, Color(1.0, 0.85, 0.2))
+		"results":
+			_racing = false
+			_racebot_readied = false  # re-ready for the next race
+			if _local:
+				_local.input_enabled = false
+			if _race_hud:
+				_race_hud.show_results(payload.get("order", []), Net.my_id)
+
+
+func _reset_to_start() -> void:
+	if _local == null:
+		return
+	_local.global_position = level.start_pos
+	_local.velocity = Vector2.ZERO
+	_local.respawn_pos = level.start_pos
+	_local.finished = false
+	Net.local_pos = level.start_pos
 
 
 func _spawn_local() -> void:
@@ -62,7 +147,8 @@ func _physics_process(delta: float) -> void:
 		return
 	if _local:
 		Net.local_pos = _local.global_position
-		if not _timing and not _finished and absf(_local.velocity.x) > 1.0:
+		# Free-run mode starts timing on first movement; race mode is gated by the GO event.
+		if not _race_mode and not _timing and not _finished and absf(_local.velocity.x) > 1.0:
 			_timing = true
 		if _timing and not _finished:
 			_race_time += delta
@@ -105,10 +191,17 @@ func _on_checkpoint(index: int, pos: Vector2) -> void:
 func _on_finish() -> void:
 	if _finished:
 		return
+	if _race_mode and not _racing:
+		return  # ignore finishes during lobby warm-up
 	_finished = true
+	_timing = false
 	if _local:
 		_local.finished = true
-	banner.text = "FINISH!  " + _format_time(_race_time)
+	if _race_mode and _racing:
+		Net.report_finish(int(_race_time * 1000.0))
+		banner.text = "FINISHED  " + _format_time(_race_time)
+	else:
+		banner.text = "FINISH!  " + _format_time(_race_time)
 	print("[FINISH] time=%s" % _format_time(_race_time))
 
 
@@ -198,7 +291,9 @@ func _add_sky_layer(pb: ParallaxBackground, scale: float, color: Color, seedn: i
 
 
 func _input(event: InputEvent) -> void:
-	# R restarts the run locally (handy while iterating; full race reset is Day 4).
+	# R restarts the run locally — only in free-run mode (race resets are server-driven).
+	if _race_mode:
+		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_R and _local:
 		_local.respawn_pos = level.start_pos
 		_local.global_position = level.start_pos

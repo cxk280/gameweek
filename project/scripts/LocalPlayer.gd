@@ -26,6 +26,7 @@ const DASH_EXIT := 1.15            # keep this × RUN_SPEED when a dash ends (mo
 var respawn_pos := Vector2.ZERO
 var facing := 1.0
 var finished := false
+var input_enabled := true
 
 var _level: Level = null
 var _coyote := 0.0
@@ -53,7 +54,8 @@ func setup(pname: String, _color: Color, level: Level, char_id: String) -> void:
 	label.text = pname
 	collision_layer = Level.L_PLAYER
 	collision_mask = Level.L_SOLID
-	_auto = OS.get_cmdline_user_args().has("--auto")
+	var args := OS.get_cmdline_user_args()
+	_auto = args.has("--auto") or args.has("--racebot")
 	_apply_camera_limits()
 
 
@@ -173,14 +175,14 @@ func respawn() -> void:
 
 func _input_axis() -> float:
 	if _auto:
-		return 1.0
-	return Input.get_axis("move_left", "move_right")
+		return 1.0 if input_enabled else 0.0
+	return Input.get_axis("move_left", "move_right") if input_enabled else 0.0
 
 
 func _wants_jump_pressed() -> bool:
 	if _auto:
-		return is_on_floor() and (not _floor_ahead.is_colliding() or is_on_wall())
-	return Input.is_action_just_pressed("jump")
+		return input_enabled and is_on_floor() and (not _floor_ahead.is_colliding() or is_on_wall())
+	return input_enabled and Input.is_action_just_pressed("jump")
 
 
 func _wants_jump_released() -> bool:
@@ -188,4 +190,4 @@ func _wants_jump_released() -> bool:
 
 
 func _wants_dash() -> bool:
-	return false if _auto else Input.is_action_just_pressed("dash")
+	return input_enabled and Input.is_action_just_pressed("dash") if not _auto else false

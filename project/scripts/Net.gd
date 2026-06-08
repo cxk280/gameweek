@@ -10,9 +10,24 @@ extends Node
 ##         client = default (browser).
 
 signal players_updated(states: Dictionary)  # peer_id -> {pos:Vector2, name:String, color:Color}
+signal race_event(phase: String, payload: Dictionary)  # client-side race phase changes
 
 const DEFAULT_PORT := 8915
 const TICK := 1.0 / 20.0
+const COUNTDOWN := 3
+const FINISH_GRACE := 20.0   # seconds the race continues after the first finisher
+const RESULTS_TIME := 9.0     # results screen duration before returning to lobby
+
+# --- Race state (server-authoritative) ---
+var phase := "lobby"          # lobby · countdown · racing · results
+var readies := {}               # id -> bool
+var finishers := []           # ordered [{id,name,char,ms}]
+var _names := {}              # id -> String
+var _chars := {}              # id -> String
+var _cd := 0.0
+var _cd_last := -1
+var _grace := -1.0
+var _results_t := 0.0
 ## Filled after the server is deployed. The browser can't read server env at runtime,
 ## so the web client's server URL is baked here (overridable at runtime via ?server=wss://…).
 const WEB_SERVER_URL := "wss://rooftop-server-production.up.railway.app"
@@ -128,6 +143,8 @@ func _process(delta: float) -> void:
 			receive_snapshot.rpc(states)
 		else:
 			submit_state.rpc_id(1, local_pos)
+	if is_server:
+		_server_race_tick(delta)
 	if not is_server:
 		_ping_accum += delta
 		if _ping_accum >= 1.0:
@@ -145,6 +162,13 @@ func _on_peer_connected(id: int) -> void:
 func _on_peer_disconnected(id: int) -> void:
 	print("[server] peer disconnected: %d" % id)
 	states.erase(id)
+	readies.erase(id)
+	_names.erase(id)
+	_chars.erase(id)
+	if phase == "lobby":
+		_broadcast_lobby()
+	elif phase == "racing" and finishers.size() >= readies.size() and readies.size() > 0:
+		_end_race()
 
 
 # --- Client connection lifecycle ---
@@ -173,6 +197,14 @@ func _on_server_disconnected() -> void:
 func register(pname: String, color: Color, char_id: String) -> void:
 	var id := multiplayer.get_remote_sender_id()
 	states[id] = {"pos": Vector2.ZERO, "name": pname, "color": color, "char": char_id}
+	_names[id] = pname
+	_chars[id] = char_id
+	if not readies.has(id):
+		readies[id] = false
+	# Tell the newcomer the current phase, then refresh everyone's lobby view.
+	srv_phase.rpc_id(id, phase, _lobby_payload() if phase == "lobby" else {})
+	if phase == "lobby":
+		_broadcast_lobby()
 
 
 @rpc("any_peer", "unreliable_ordered")
@@ -197,3 +229,122 @@ func ping_req() -> void:
 @rpc("authority", "reliable")
 func pong_resp() -> void:
 	rtt_ms = Time.get_ticks_msec() - _ping_sent_ms
+
+
+# ============================================================ Race loop (server-authoritative)
+
+func _server_race_tick(delta: float) -> void:
+	match phase:
+		"countdown":
+			_cd -= delta
+			var n := int(ceil(_cd))
+			if n != _cd_last:
+				_cd_last = n
+				if n <= 0:
+					_start_race()
+				else:
+					srv_phase.rpc("countdown", {"n": n})
+		"racing":
+			if _grace >= 0.0:
+				_grace -= delta
+				if _grace <= 0.0:
+					_end_race()
+		"results":
+			_results_t -= delta
+			if _results_t <= 0.0:
+				_reset_lobby()
+
+
+func _lobby_payload() -> Dictionary:
+	return {"readies": readies.duplicate(), "names": _names.duplicate(), "chars": _chars.duplicate()}
+
+
+func _broadcast_lobby() -> void:
+	srv_phase.rpc("lobby", _lobby_payload())
+
+
+func _maybe_start() -> void:
+	if phase != "lobby" or readies.is_empty():
+		return
+	for id in readies:
+		if not readies[id]:
+			return
+	phase = "countdown"
+	_cd = float(COUNTDOWN) + 0.99
+	_cd_last = -1
+	print("[server] all readies (%d) → countdown" % readies.size())
+
+
+func _start_race() -> void:
+	phase = "racing"
+	finishers = []
+	_grace = -1.0
+	srv_phase.rpc("racing", {})
+	print("[server] GO — race started")
+
+
+func _end_race() -> void:
+	phase = "results"
+	_results_t = RESULTS_TIME
+	srv_phase.rpc("results", {"order": finishers})
+	var order := ""
+	for f in finishers:
+		order += " %s(%dms)" % [f["name"], f["ms"]]
+	print("[server] race over → results:%s" % order)
+
+
+func _reset_lobby() -> void:
+	phase = "lobby"
+	finishers = []
+	for id in readies:
+		readies[id] = false
+	_broadcast_lobby()
+	print("[server] back to lobby")
+
+
+# --- Client API ---
+
+func send_ready(r: bool) -> void:
+	if is_connected:
+		set_ready.rpc_id(1, r)
+
+
+func report_finish(ms: int) -> void:
+	if is_connected:
+		submit_finish.rpc_id(1, ms)
+
+
+# --- Race RPCs ---
+
+@rpc("any_peer", "reliable")
+func set_ready(r: bool) -> void:
+	if not is_server:
+		return
+	var id := multiplayer.get_remote_sender_id()
+	if readies.get(id, false) == r:
+		return  # no change — avoid rebroadcast storms
+	readies[id] = r
+	_broadcast_lobby()
+	_maybe_start()
+
+
+@rpc("any_peer", "reliable")
+func submit_finish(ms: int) -> void:
+	if not is_server or phase != "racing":
+		return
+	var id := multiplayer.get_remote_sender_id()
+	for f in finishers:
+		if f["id"] == id:
+			return
+	finishers.append({"id": id, "name": _names.get(id, "p%d" % id), "char": _chars.get(id, "vex"), "ms": ms})
+	srv_phase.rpc("standings", {"order": finishers})
+	if _grace < 0.0:
+		_grace = FINISH_GRACE
+	if finishers.size() >= readies.size():
+		_end_race()
+
+
+@rpc("authority", "reliable")
+func srv_phase(phase_name: String, payload: Dictionary) -> void:
+	phase = phase_name
+	race_event.emit(phase_name, payload)

@@ -1,0 +1,224 @@
+extends CanvasLayer
+class_name RaceHUD
+## Client race UI: lobby (player list + ready), synced countdown, live standings, and the
+## results screen. Driven by Main from Net's race_event; emits ready_pressed back out.
+
+signal ready_pressed(is_ready: bool)
+
+const CYAN := Color(0.2, 0.95, 1.0)
+const GOLD := Color(1.0, 0.85, 0.2)
+const DIM := Color(0.7, 0.72, 0.85)
+
+var _is_ready := false
+
+var _lobby: Control
+var _lobby_list: VBoxContainer
+var _ready_btn: Button
+var _countdown: Label
+var _standings: VBoxContainer
+var _results: Control
+var _results_list: VBoxContainer
+var _toast: Label
+
+
+func _ready() -> void:
+	layer = 40
+	_build_lobby()
+	_build_countdown()
+	_build_standings()
+	_build_results()
+	_build_toast()
+	hide_all()
+
+
+func hide_all() -> void:
+	_lobby.visible = false
+	_countdown.visible = false
+	_standings.visible = false
+	_results.visible = false
+	_toast.visible = false
+
+
+# ------------------------------------------------------------------------ public, from Main
+
+func show_lobby(payload: Dictionary, my_id: int) -> void:
+	hide_all()
+	_lobby.visible = true
+	for c in _lobby_list.get_children():
+		c.queue_free()
+	var names: Dictionary = payload.get("names", {})
+	var readies: Dictionary = payload.get("readies", {})
+	for id in names:
+		var row := Label.new()
+		var mark := "●" if readies.get(id, false) else "○"
+		var you := "  (you)" if int(id) == my_id else ""
+		row.text = "%s  %s%s" % [mark, names[id], you]
+		row.add_theme_color_override("font_color", CYAN if readies.get(id, false) else DIM)
+		_lobby_list.add_child(row)
+	_is_ready = bool(readies.get(my_id, false))
+	_ready_btn.text = "CANCEL" if _is_ready else "READY UP"
+	_ready_btn.add_theme_color_override("font_color", GOLD if _is_ready else Color.WHITE)
+
+
+func show_countdown(n: int) -> void:
+	hide_all()
+	_countdown.visible = true
+	_countdown.text = "GO!" if n <= 0 else str(n)
+
+
+func start_racing() -> void:
+	hide_all()
+	_standings.visible = true
+	for c in _standings.get_children():
+		c.queue_free()
+
+
+func update_standings(order: Array, my_id: int) -> int:
+	_standings.visible = true
+	for c in _standings.get_children():
+		c.queue_free()
+	var title := Label.new()
+	title.text = "FINISHED"
+	title.add_theme_color_override("font_color", CYAN)
+	_standings.add_child(title)
+	var my_place := 0
+	var place := 0
+	for f in order:
+		place += 1
+		var row := Label.new()
+		row.text = "%d. %s  %s" % [place, f["name"], _fmt(int(f["ms"]))]
+		row.add_theme_color_override("font_color", GOLD if int(f["id"]) == my_id else DIM)
+		_standings.add_child(row)
+		if int(f["id"]) == my_id:
+			my_place = place
+	return my_place
+
+
+func show_results(order: Array, my_id: int) -> void:
+	hide_all()
+	_results.visible = true
+	for c in _results_list.get_children():
+		c.queue_free()
+	var place := 0
+	for f in order:
+		place += 1
+		var row := Label.new()
+		var medal: String = ["🥇", "🥈", "🥉"][place - 1] if place <= 3 else "  "
+		row.text = "%s  %d. %s   %s" % [medal, place, f["name"], _fmt(int(f["ms"]))]
+		row.add_theme_font_size_override("font_size", 22)
+		row.add_theme_color_override("font_color", GOLD if int(f["id"]) == my_id else Color.WHITE)
+		_results_list.add_child(row)
+	if order.is_empty():
+		var none := Label.new()
+		none.text = "No finishers"
+		none.add_theme_color_override("font_color", DIM)
+		_results_list.add_child(none)
+
+
+func toast(text: String, color: Color) -> void:
+	_toast.visible = true
+	_toast.text = text
+	_toast.add_theme_color_override("font_color", color)
+
+
+# ------------------------------------------------------------------------------ build helpers
+
+func _build_lobby() -> void:
+	_lobby = _dim_panel()
+	add_child(_lobby)
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 14)
+	_center(_lobby, box)
+	_title(box, "LOBBY")
+	_lobby_list = VBoxContainer.new()
+	_lobby_list.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_child(_lobby_list)
+	_ready_btn = Button.new()
+	_ready_btn.text = "READY UP"
+	_ready_btn.custom_minimum_size = Vector2(220, 48)
+	_ready_btn.pressed.connect(_on_ready)
+	box.add_child(_ready_btn)
+	var hint := Label.new()
+	hint.text = "The race starts when everyone is ready."
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_color_override("font_color", DIM)
+	box.add_child(hint)
+
+
+func _build_countdown() -> void:
+	_countdown = Label.new()
+	_countdown.anchor_right = 1.0
+	_countdown.anchor_bottom = 1.0
+	_countdown.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_countdown.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_countdown.add_theme_font_size_override("font_size", 140)
+	_countdown.add_theme_color_override("font_color", CYAN)
+	add_child(_countdown)
+
+
+func _build_standings() -> void:
+	_standings = VBoxContainer.new()
+	_standings.position = Vector2(1040, 70)
+	add_child(_standings)
+
+
+func _build_results() -> void:
+	_results = _dim_panel()
+	add_child(_results)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	_center(_results, box)
+	_title(box, "RESULTS")
+	_results_list = VBoxContainer.new()
+	box.add_child(_results_list)
+	var foot := Label.new()
+	foot.text = "Next race starting soon…"
+	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	foot.add_theme_color_override("font_color", DIM)
+	box.add_child(foot)
+
+
+func _build_toast() -> void:
+	_toast = Label.new()
+	_toast.anchor_right = 1.0
+	_toast.offset_top = 110.0
+	_toast.offset_bottom = 150.0
+	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast.add_theme_font_size_override("font_size", 30)
+	add_child(_toast)
+
+
+func _dim_panel() -> Control:
+	var c := ColorRect.new()
+	c.color = Color(0.02, 0.02, 0.07, 0.86)
+	c.anchor_right = 1.0
+	c.anchor_bottom = 1.0
+	return c
+
+
+func _center(parent: Control, child: Control) -> void:
+	var cc := CenterContainer.new()
+	cc.anchor_right = 1.0
+	cc.anchor_bottom = 1.0
+	parent.add_child(cc)
+	cc.add_child(child)
+
+
+func _title(box: VBoxContainer, text: String) -> void:
+	var t := Label.new()
+	t.text = text
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	t.add_theme_font_size_override("font_size", 40)
+	t.add_theme_color_override("font_color", CYAN)
+	box.add_child(t)
+
+
+func _on_ready() -> void:
+	_is_ready = not _is_ready
+	_ready_btn.text = "CANCEL" if _is_ready else "READY UP"
+	ready_pressed.emit(_is_ready)
+
+
+func _fmt(ms: int) -> String:
+	return "%d:%02d.%03d" % [ms / 60000, (ms / 1000) % 60, ms % 1000]

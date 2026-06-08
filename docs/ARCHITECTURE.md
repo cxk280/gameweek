@@ -31,11 +31,14 @@
 
 Godot's high-level multiplayer (RPCs, `MultiplayerSpawner`, `MultiplayerSynchronizer`) running over `WebSocketMultiplayerPeer` (see [DECISIONS.md](./DECISIONS.md) D2).
 
-**Server authoritative for match flow:**
-- lobby membership & ready state
-- level selection + synced start countdown
-- checkpoint order & lap/segment counting → **finish order** (anti-cheat-lite validation)
-- unlock grants & leaderboard persistence
+**Server authoritative for match flow** (state machine in `Net.gd`, lives only on the server):
+`lobby → countdown → racing → results → lobby`.
+- lobby membership & ready state (`set_ready` RPC); countdown begins when all ready
+- synced countdown broadcast (`srv_phase` RPC) → simultaneous GO
+- **finish order**: clients report finish time (`submit_finish`); the server orders by receipt and is the single source of truth (ignores duplicates, holds a post-first-finisher grace window, DNFs the rest)
+- results broadcast, then auto-return to lobby
+- late-join → spectate current race, joins next lobby; disconnect mid-race handled
+- (planned) checkpoint validation + unlock grants & leaderboard persistence
 
 **Client-owned, server-relayed for movement:**
 - server spawns one player node per peer via `MultiplayerSpawner`
