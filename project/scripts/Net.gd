@@ -36,6 +36,7 @@ var _ping_sent_ms := 0
 
 
 func _ready() -> void:
+	_setup_input()
 	var args := OS.get_cmdline_user_args()
 	if args.has("--server") or OS.has_feature("dedicated_server"):
 		_start_server()
@@ -44,6 +45,24 @@ func _ready() -> void:
 		local_color = Color.from_hsv(randf(), 0.65, 0.98)
 		local_pos = Vector2(randf_range(220, 1060), randf_range(160, 560))
 		_start_client()
+
+
+func _setup_input() -> void:
+	# Define controls in code so we don't hand-author InputEventKey blobs in project.godot.
+	_add_action("move_left", [KEY_A, KEY_LEFT])
+	_add_action("move_right", [KEY_D, KEY_RIGHT])
+	_add_action("jump", [KEY_SPACE, KEY_W, KEY_UP])
+	_add_action("dash", [KEY_SHIFT])
+
+
+func _add_action(action: String, physical_keys: Array) -> void:
+	if InputMap.has_action(action):
+		return
+	InputMap.add_action(action)
+	for k in physical_keys:
+		var ev := InputEventKey.new()
+		ev.physical_keycode = k
+		InputMap.action_add_event(action, ev)
 
 
 func _port() -> int:
@@ -137,8 +156,9 @@ func _on_connected() -> void:
 
 
 func _on_connection_failed() -> void:
-	printerr("[client] connection FAILED")
-	get_tree().quit(1)
+	# Non-fatal: keep playing single-player; remote ghosts just won't appear.
+	push_warning("[client] connection failed — continuing offline")
+	is_connected = false
 
 
 func _on_server_disconnected() -> void:
