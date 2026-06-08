@@ -1,0 +1,23 @@
+; Engine configuration file.
+; Rooftop Rush — Godot 4.6
+
+config_version=5
+
+[application]
+
+config/name="Rooftop Rush"
+config/description="Real-time multiplayer 2D platformer race (Game Week)"
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.6", "GL Compatibility")
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
