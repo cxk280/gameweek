@@ -1,109 +1,83 @@
 extends Node2D
-## Day-1 networking POC + Day-2 spine seed.
+## Arena scene controller (spine vertical slice).
 ##
-## Proves Godot's high-level multiplayer (RPCs) runs over WebSocketMultiplayerPeer,
-## which is the transport the whole project depends on (browsers + Railway can't do
-## ENet/UDP). Role is chosen from `--server` user arg or the dedicated_server feature.
-##
-## Headless validation:
-##   server: godot --headless --path project -- --server
-##   client: godot --headless --path project -- --client   (expects "ROUNDTRIP OK")
+## Renders one square per connected peer from Net's snapshots, drives the local
+## player's movement from input, interpolates remote players, and shows a HUD with
+## live player count + RTT. `--bot` synthesizes movement + logs what it sees so the
+## whole sync path is verifiable headlessly before deploy.
 
-const DEFAULT_PORT := 8915
+const PlayerScene := preload("res://scenes/Player.tscn")
+const SPEED := 320.0
+const ARENA := Rect2(16, 16, 1248, 688)
 
-var _is_server := false
+var _nodes := {}  # peer_id -> Player node
+var _bot := false
+var _log_accum := 0.0
+
+@onready var players: Node2D = $Players
+@onready var info: Label = $HUD/Info
 
 
 func _ready() -> void:
-	var args := OS.get_cmdline_user_args()
-	if args.has("--server") or OS.has_feature("dedicated_server"):
-		_is_server = true
-		_start_server()
-	else:
-		_start_client()
+	_bot = OS.get_cmdline_user_args().has("--bot")
+	Net.players_updated.connect(_on_players_updated)
 
 
-func _port() -> int:
-	var p := OS.get_environment("PORT")
-	return int(p) if p != "" else DEFAULT_PORT
-
-
-func _start_server() -> void:
-	var peer := WebSocketMultiplayerPeer.new()
-	var err := peer.create_server(_port(), "*")
-	if err != OK:
-		printerr("[server] create_server failed: %d" % err)
-		get_tree().quit(1)
+func _physics_process(delta: float) -> void:
+	if Net.is_server:
+		info.text = "SERVER  ·  players=%d" % Net.states.size()
 		return
-	multiplayer.multiplayer_peer = peer
-	multiplayer.peer_connected.connect(_on_peer_connected)
-	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
-	print("[server] WebSocket server listening on port %d" % _port())
-
-
-func _start_client() -> void:
-	var url := OS.get_environment("SERVER_URL")
-	if url == "":
-		url = "ws://127.0.0.1:%d" % _port()
-	var peer := WebSocketMultiplayerPeer.new()
-	var err := peer.create_client(url)
-	if err != OK:
-		printerr("[client] create_client failed: %d" % err)
-		get_tree().quit(1)
+	if not Net.is_connected:
+		info.text = "connecting…"
 		return
-	multiplayer.multiplayer_peer = peer
-	multiplayer.connected_to_server.connect(_on_connected)
-	multiplayer.connection_failed.connect(_on_connection_failed)
-	multiplayer.server_disconnected.connect(_on_server_disconnected)
-	print("[client] connecting to %s ..." % url)
-	# Safety net so a headless run can never hang a CI/build.
-	get_tree().create_timer(8.0).timeout.connect(_on_timeout)
+
+	var input := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	if _bot:
+		var t := Time.get_ticks_msec() / 1000.0
+		input = Vector2(sin(t + Net.my_id), cos(t * 1.3 + Net.my_id))
+
+	Net.local_pos += input * SPEED * delta
+	Net.local_pos.x = clampf(Net.local_pos.x, ARENA.position.x, ARENA.end.x)
+	Net.local_pos.y = clampf(Net.local_pos.y, ARENA.position.y, ARENA.end.y)
+	if _nodes.has(Net.my_id):
+		_nodes[Net.my_id].position = Net.local_pos
+
+	info.text = "id=%d  ·  players=%d  ·  ping=%dms" % [Net.my_id, _nodes.size(), Net.rtt_ms]
+
+	if _bot:
+		_log_accum += delta
+		if _log_accum >= 1.0:
+			_log_accum = 0.0
+			var others := 0
+			var sample := ""
+			for id in _nodes:
+				if id != Net.my_id:
+					others += 1
+					sample = "peer %d @ %v" % [id, _nodes[id].target.round()]
+			print("[bot %d] sees %d other(s)  %s" % [Net.my_id, others, sample])
 
 
-# --- Server peer lifecycle ---
-
-func _on_peer_connected(id: int) -> void:
-	print("[server] peer connected: %d" % id)
-
-
-func _on_peer_disconnected(id: int) -> void:
-	print("[server] peer disconnected: %d" % id)
+func _process(delta: float) -> void:
+	# Interpolate remote players toward their last snapshot position.
+	for id in _nodes:
+		if id != Net.my_id:
+			var n: Player = _nodes[id]
+			n.position = n.position.lerp(n.target, clampf(delta * 12.0, 0.0, 1.0))
 
 
-# --- Client connection lifecycle ---
-
-func _on_connected() -> void:
-	print("[client] connected (my id=%d) — sending ping" % multiplayer.get_unique_id())
-	ping.rpc_id(1, "hello-from-%d" % multiplayer.get_unique_id())
-
-
-func _on_connection_failed() -> void:
-	printerr("[client] connection FAILED")
-	get_tree().quit(1)
-
-
-func _on_server_disconnected() -> void:
-	printerr("[client] server disconnected")
-	get_tree().quit(1)
-
-
-func _on_timeout() -> void:
-	printerr("[client] TIMEOUT — no RPC roundtrip within 8s")
-	get_tree().quit(1)
-
-
-# --- The RPC roundtrip under test ---
-
-@rpc("any_peer", "reliable")
-func ping(msg: String) -> void:
-	# Runs on the server (callable by any client peer).
-	var sender := multiplayer.get_remote_sender_id()
-	print("[server] ping from %d: %s" % [sender, msg])
-	pong.rpc_id(sender, "pong:%s" % msg)
-
-
-@rpc("authority", "reliable")
-func pong(msg: String) -> void:
-	# Runs on the client (server is the authority).
-	print("[client] got '%s' — ROUNDTRIP OK" % msg)
-	get_tree().quit(0)
+func _on_players_updated(states: Dictionary) -> void:
+	for id in states:
+		var s: Dictionary = states[id]
+		if not _nodes.has(id):
+			var p := PlayerScene.instantiate()
+			players.add_child(p)
+			p.setup(str(s["name"]), s["color"], id == Net.my_id)
+			p.position = s["pos"]
+			p.target = s["pos"]
+			_nodes[id] = p
+		else:
+			_nodes[id].target = s["pos"]
+	for id in _nodes.keys():
+		if not states.has(id):
+			_nodes[id].queue_free()
+			_nodes.erase(id)

@@ -1,0 +1,6 @@
+# Serves the Godot HTML5 export as static files on Railway's $PORT.
+# Single-threaded export needs no COOP/COEP headers (see docs/DECISIONS.md D4).
+:{$PORT:8080}
+root * /usr/share/caddy
+file_server
+encode gzip

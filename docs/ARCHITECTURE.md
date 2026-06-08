@@ -1,6 +1,11 @@
 # Architecture
 
-> Status: **target** architecture (Day 1). Updated with the real deployed topology after the Day-2 spine POC.
+> Status: **deployed & verified (Day 2).** The spine below is live on Railway and was
+> confirmed end-to-end over the public internet (two clients synced through `wss://`).
+>
+> **Live:** client https://rooftop-web-production.up.railway.app · server `wss://rooftop-server-production.up.railway.app`
+> Railway injects `PORT` (observed `8080`); the server binds `0.0.0.0:$PORT` and Railway
+> terminates TLS at the edge, so the server speaks plain `ws://` while browsers use `wss://`.
 
 ## Topology
 

@@ -8,7 +8,13 @@ config_version=5
 config/name="Rooftop Rush"
 config/description="Real-time multiplayer 2D platformer race (Game Week)"
 run/main_scene="res://scenes/Main.tscn"
+run/flush_stdout_on_print=true
+run/flush_stdout_on_print.debug=true
 config/features=PackedStringArray("4.6", "GL Compatibility")
+
+[autoload]
+
+Net="*res://scripts/Net.gd"
 
 [display]
 

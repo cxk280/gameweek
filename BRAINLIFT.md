@@ -39,4 +39,33 @@ Pick the stack, prove the *learning approach* works, and de-risk the single scar
 
 ---
 
+## Day 2 — Jun 8 · Deployed multiplayer spine (the make-or-break gate) ✅
+
+### Goal
+Get the riskiest thing — a real-time multiplayer slice — **deployed and reachable on the public internet** before writing a line of actual game code.
+
+### What happened (gate PASSED, same day as Day 1)
+- Grew the POC into a real **authoritative-relay spine** (`Net.gd` autoload): clients submit position at 20 Hz, server broadcasts snapshots, remote players interpolate; live **RTT/ping** readout; connect/disconnect handled.
+- Verified the whole sync path **headlessly** first: server + two `--bot` clients, each logging the *other's changing position*. No browser needed to prove correctness.
+- **Exported** a Linux dedicated-server binary + a single-threaded Web client (`export_presets.cfg`), wrapped the server in Docker, and **deployed both to Railway** as two services.
+- **End-to-end proof over the public internet:** pointed two local clients at `wss://rooftop-server-production.up.railway.app` → they connected through Railway's TLS edge and synced each other's movement. Web client serves over HTTPS (wasm/js/pck all 200).
+
+### AI prompts / techniques that worked
+- _"Railway gives no UDP and terminates TLS at the edge — what exactly does my Godot WS server bind, and how does the browser reach it?"_ → the `wss://` (client) vs plain `ws://`+`$PORT` (server) split, which made the deploy work first try on the networking layer.
+- **Verify headlessly, then deploy.** Bots that auto-move + log what they see turned "does multiplayer work?" into a one-command assertion — caught nothing broken because the design was sound, but would have caught regressions instantly.
+
+### Challenges / fixes
+- **Silent server on Railway:** stdout is block-buffered off a TTY → no logs. Fix: `application/run/flush_stdout_on_print=true`.
+- **`railway up` skipped the exported binary** (it's under gitignored `build/`) → Docker `COPY` failed. Fix: `--no-gitignore`.
+- **Web deploy 504** pulling the Caddy base image — transient Docker Hub hiccup; a re-run succeeded.
+- Benign `ready_state != STATE_OPEN` when a snapshot races a disconnecting peer — harmless, will guard the broadcast on Day 4.
+
+### Note
+Two phases (Day 1 + Day 2) done in one sitting. The hardest, highest-risk work — multiplayer transport + deploy — is behind us and **live**, which is exactly the point of front-loading it.
+
+### Next
+Day 3: real player controller (run/jump/coyote/dash, *feels good*) + Level 1 (TileMap, checkpoints, finish), judged visually in the editor.
+
+---
+
 <!-- New day entries go above this line, newest at top of the day list or appended in order — keep daily. -->

@@ -2,7 +2,7 @@
 
 > A real-time multiplayer platformer **race**. Sprint across the rooftops, hit every checkpoint, don't fall — first to the finish wins. Built in **Godot 4.6** for **GFA2 Game Week**.
 
-**Live demo:** _(deployed Day 2 — link TBD)_
+**▶ Play:** https://rooftop-web-production.up.railway.app  ·  Server: `wss://rooftop-server-production.up.railway.app`
 
 ---
 
@@ -44,4 +44,4 @@ Controls: **←/→** or **A/D** move · **Space/W/↑** jump · **Shift** dash.
 
 ## Status
 
-Day 1 — scaffolding. See the task list / `BRAINLIFT.md` for current progress.
+**Day 2 — deployed multiplayer spine is live.** Both services run on Railway; clients sync in real time over WebSocket (verified across the public internet). Next: real player controller + race levels. See `BRAINLIFT.md` for the daily log.
