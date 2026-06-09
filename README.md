@@ -4,6 +4,10 @@
 
 **▶ Play:** https://rooftop-web-production.up.railway.app  ·  Server: `wss://rooftop-server-production.up.railway.app`
 
+![The roster — Vex, Glitch, Echo, Kira, Pax (idle / run / jump)](docs/images/roster.png)
+
+_The five runners, idle/run/jump — original pixel art authored as palette grids in code._
+
 ---
 
 ## What it is

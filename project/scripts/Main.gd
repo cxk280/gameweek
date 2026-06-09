@@ -50,6 +50,10 @@ func _ready() -> void:
 		_spawn_local()
 	elif _auto:
 		Net.local_char = CharacterArt.ids()[0]
+		# --level=N test hook: free-run a specific course headlessly.
+		for a in args:
+			if a.begins_with("--level="):
+				_ensure_level(int(a.split("=")[1]))
 		_spawn_local()
 	else:
 		var select := SelectScene.instantiate()
