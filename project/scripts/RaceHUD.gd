@@ -190,7 +190,7 @@ func _build_lobby() -> void:
 	_ready_btn.pressed.connect(_on_ready)
 	box.add_child(_ready_btn)
 	var hint := Label.new()
-	hint.text = "The race starts when everyone is ready."
+	hint.text = "The race starts when everyone is ready.\nShare this page's URL to race a friend — or ready up solo for a time trial."
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_color_override("font_color", DIM)
 	box.add_child(hint)

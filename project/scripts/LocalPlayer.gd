@@ -37,6 +37,10 @@ var _dash_dir := 1.0
 var _can_air_dash := true
 var _trail_accent := Color(0.0, 0.95, 1.0)
 var _auto := false
+var _dust: CPUParticles2D
+var _shake := 0.0
+var _shake_mag := 0.0
+var _was_on_floor := true
 
 @onready var sprite: AnimatedSprite2D = $Sprite
 @onready var label: Label = $Label
@@ -56,7 +60,46 @@ func setup(pname: String, _color: Color, level: Level, char_id: String) -> void:
 	collision_mask = Level.L_SOLID
 	var args := OS.get_cmdline_user_args()
 	_auto = args.has("--auto") or args.has("--racebot")
+	_make_dust()
 	_apply_camera_limits()
+
+
+func _make_dust() -> void:
+	_dust = CPUParticles2D.new()
+	_dust.emitting = false
+	_dust.one_shot = true
+	_dust.explosiveness = 0.85
+	_dust.amount = 10
+	_dust.lifetime = 0.4
+	_dust.position = Vector2(0, 20)
+	_dust.direction = Vector2(0, -1)
+	_dust.spread = 70.0
+	_dust.gravity = Vector2(0, 320)
+	_dust.initial_velocity_min = 40.0
+	_dust.initial_velocity_max = 130.0
+	_dust.scale_amount_min = 1.0
+	_dust.scale_amount_max = 2.5
+	_dust.color = Color(0.75, 0.8, 0.95, 0.7)
+	add_child(_dust)
+
+
+func _burst_dust(amount := 10) -> void:
+	_dust.amount = amount
+	_dust.restart()
+	_dust.emitting = true
+
+
+func shake(mag: float) -> void:
+	_shake = 1.0
+	_shake_mag = mag
+
+
+func _apply_shake(delta: float) -> void:
+	if _shake > 0.0:
+		_shake = maxf(0.0, _shake - delta * 4.0)
+		camera.offset = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * _shake_mag * _shake
+	elif camera.offset != Vector2.ZERO:
+		camera.offset = camera.offset.lerp(Vector2.ZERO, 0.3)
 
 
 ## Cosmetic unlock: brighter trail as you rack up wins.
@@ -82,6 +125,7 @@ func _physics_process(delta: float) -> void:
 		velocity = velocity.move_toward(Vector2.ZERO, GROUND_FRICTION * delta)
 		move_and_slide()
 		_update_anim()
+		_apply_shake(delta)
 		return
 
 	var dir := _input_axis()
@@ -99,6 +143,8 @@ func _physics_process(delta: float) -> void:
 		_dash_dir = facing
 		if not is_on_floor():
 			_can_air_dash = false
+		Sfx.play("dash", -7.0)
+		shake(5.0)
 	if _dash_time > 0.0:
 		_dash_time -= delta
 		velocity.x = _dash_dir * DASH_SPEED
@@ -109,6 +155,8 @@ func _physics_process(delta: float) -> void:
 			velocity.x = _dash_dir * RUN_SPEED * DASH_EXIT  # exit with momentum, not a screech
 		_post_move()
 		_update_anim()
+		_apply_shake(delta)
+		_was_on_floor = is_on_floor()
 		return
 
 	# Horizontal accel / friction.
@@ -128,12 +176,22 @@ func _physics_process(delta: float) -> void:
 		velocity.y = JUMP_VELOCITY
 		_buffer = 0.0
 		_coyote = 0.0
+		Sfx.play("jump", -9.0)
+		_burst_dust(8)
 	if _wants_jump_released() and velocity.y < 0.0:
 		velocity.y *= JUMP_CUT
 
+	var fall := velocity.y
 	move_and_slide()
 	_post_move()
 	_update_anim()
+	_apply_shake(delta)
+	# Landing: airborne -> grounded with downward speed.
+	if not _was_on_floor and is_on_floor() and fall > 120.0:
+		Sfx.play("land", -10.0)
+		_burst_dust(12)
+		shake(clampf(fall / 160.0, 1.0, 6.0))
+	_was_on_floor = is_on_floor()
 
 
 func _update_anim() -> void:

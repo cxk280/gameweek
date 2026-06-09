@@ -104,6 +104,7 @@ func _on_race_event(phase: String, payload: Dictionary) -> void:
 				_local.input_enabled = false
 			if _race_hud:
 				_race_hud.show_countdown(int(payload.get("n", COUNTDOWN_FALLBACK)))
+			Sfx.play("beep")
 		"racing":
 			_racing = true
 			_finished = false
@@ -115,6 +116,7 @@ func _on_race_event(phase: String, payload: Dictionary) -> void:
 				_local.input_enabled = true
 			if _race_hud:
 				_race_hud.start_racing()
+			Sfx.play("go", -3.0)
 		"standings":
 			if _race_hud:
 				var place := _race_hud.update_standings(payload.get("order", []), Net.my_id)
@@ -207,6 +209,7 @@ func _on_players_updated(states: Dictionary) -> void:
 func _on_checkpoint(index: int, pos: Vector2) -> void:
 	if _local:
 		_local.respawn_pos = pos
+	Sfx.play("checkpoint", -8.0)
 	print("[cp %d] reached @ %v" % [index, pos])
 
 
@@ -219,6 +222,9 @@ func _on_finish() -> void:
 	_timing = false
 	if _local:
 		_local.finished = true
+	Sfx.play("finish", -3.0)
+	if _local:
+		_local.shake(7.0)
 	if _race_mode and _racing:
 		Net.report_finish(int(_race_time * 1000.0))
 		banner.text = "FINISHED  " + _format_time(_race_time)

@@ -30,11 +30,24 @@ func _build() -> void:
 	col.add_theme_constant_override("separation", 18)
 	center.add_child(col)
 
+	var game_title := Label.new()
+	game_title.text = "ROOFTOP RUSH"
+	game_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	game_title.add_theme_font_size_override("font_size", 64)
+	game_title.add_theme_color_override("font_color", Color(1.0, 0.15, 0.7))
+	col.add_child(game_title)
+
+	var tagline := Label.new()
+	tagline.text = "a real-time multiplayer rooftop race"
+	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tagline.add_theme_color_override("font_color", Color(0.0, 0.95, 1.0))
+	col.add_child(tagline)
+
 	var title := Label.new()
-	title.text = "SELECT YOUR RUNNER"
+	title.text = "▾  SELECT YOUR RUNNER  ▾"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 34)
-	title.add_theme_color_override("font_color", Color(0.0, 0.95, 1.0))
+	title.add_theme_font_size_override("font_size", 26)
+	title.add_theme_color_override("font_color", Color(0.7, 0.72, 0.85))
 	col.add_child(title)
 
 	var row := HBoxContainer.new()
