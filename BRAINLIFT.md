@@ -168,4 +168,40 @@ Day 6: polish + stress test — menus/UX pass, juice, ~8-player concurrency test
 
 ---
 
+## Day 6 — Jun 8/9 · Polish + stress test
+
+### Goal
+Make it feel good and prove it holds at max concurrent players.
+
+### What happened
+- **Juice:** original chiptune SFX (synthesized as WAVs from a Python script — jump/dash/land/checkpoint/countdown/finish, no external assets), dust particles on jump/land, screen shake scaled to impact, countdown beeps + GO sting, finish flourish.
+- **UX:** game title + tagline on the entry screen; a lobby hint to share the URL (the Day-2 "one player looks broken" finding, finally addressed).
+- **Stress test:** 8 headless `--racebot` clients against the **live** server — all 8 connected, raced, and finished with a correct server-authoritative order; course rotated after; **0 errors**. Measured ~30 ms warm connect to the Railway edge. Written up in `docs/PERFORMANCE.md`.
+
+### AI prompts / techniques that worked
+- **Synthesized audio with stdlib `wave` + math** instead of hunting for CC0 SFX — square/sine sweeps with envelopes give classic arcade blips that fit the neon-retro look, and they're original. Another "author the asset in code" win, like the pixel art.
+- The `--racebot` harness scaled straight from 2 → 8 with no changes — reused it as the load generator for the stress test.
+
+### Challenges / fixes
+- Confirmed the **leaderboard volume survives redeploys**: after a redeploy the server logged `loaded leaderboard (2 courses, 2 winners)` — persistence working end-to-end.
+
+## Day 7 — Jun 9 · Repo completion + release
+
+- Completed the repo for the Final gate: README (features + how-to-play + doc index), ARCHITECTURE, DECISIONS (8 ADRs), SETUP (build/deploy + gotchas), PERFORMANCE (stress test + latency), CURRICULUM, and DEMO_SCRIPTS (recording scripts for all three videos).
+- Tagged a release; final deploy verified live.
+
+### Deadline note
+The build reached Final-level features ahead of schedule; the gating deliverables are the **videos**, which I can't record — so I wrote tight, timed scripts in `docs/DEMO_SCRIPTS.md` for the MVP (Tue), Early (Thu), and Final (Sun) videos for the user to record.
+
+---
+
+## Methodology summary (for reviewers)
+
+Going from **zero Godot/GDScript experience to a deployed multiplayer game in a week** came down to a few repeatable AI-augmented habits:
+1. **De-risk the scariest unknown first, with a throwaway-but-real POC.** The WebSocket-RPC roundtrip on Day 1 retired the project's biggest risk before any game code.
+2. **Make the AI cite primary docs and flag what changed recently.** Game-dev answers online are full of stale pre-Godot-4.3 advice; the ENet→WebSocket call came from the current docs, not vibes.
+3. **Build test harnesses that work without a display.** The `--auto`/`--racebot` autopilots validated physics, level completability, the full race loop, and an 8-player stress test — all headless, then live.
+4. **Author assets in code when you have no art/audio tool.** Pixel-art palette grids (+ a render-to-PNG inspection loop) and synthesized chiptune WAVs kept everything original and unblocked.
+5. **Let the tools surface design feedback.** The autopilot looping at one checkpoint *was* the finding that a gap unfairly required the dash.
+
 <!-- New day entries go above this line, newest at top of the day list or appended in order — keep daily. -->

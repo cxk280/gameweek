@@ -34,14 +34,27 @@ This is a **Game Week** project: the point is shipping a polished multiplayer ga
 
 Controls: **←/→** or **A/D** move · **Space/W/↑** jump · **Shift** dash.
 
+## Features
+
+- 5 selectable runners (animated, original pixel art) with distinct silhouettes
+- 2 rotating courses (Neon Rooftops, Spire Climb) — checkpoints, hazards, finish gates
+- Tight platformer feel: run, variable jump, coyote time, jump buffer, air-dash with trail
+- Server-authoritative race loop: lobby → ready → synced countdown → race → results
+- Persistent per-course best-time leaderboard + win-based cosmetic unlocks
+- Chiptune SFX, particles, screen shake — all original/procedural
+
 ## Repository docs
 
 - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — system architecture & networking model
-- [`docs/DECISIONS.md`](./docs/DECISIONS.md) — key technical decisions & rationale
+- [`docs/DECISIONS.md`](./docs/DECISIONS.md) — key technical decisions & rationale (8 ADRs)
+- [`docs/SETUP.md`](./docs/SETUP.md) — local setup, build & deployment guide
+- [`docs/PERFORMANCE.md`](./docs/PERFORMANCE.md) — perf model + 8-player stress test + latency
 - [`docs/CURRICULUM.md`](./docs/CURRICULUM.md) — the AI-generated learning path used to ramp on Godot
-- [`docs/SETUP.md`](./docs/SETUP.md) — local setup & deployment guide _(added during the week)_
+- [`docs/DEMO_SCRIPTS.md`](./docs/DEMO_SCRIPTS.md) — recording scripts for the demo videos
 - [`BRAINLIFT.md`](./BRAINLIFT.md) — daily progress, AI prompts, challenges & pivots
 
 ## Status
 
-**Day 2 — deployed multiplayer spine is live.** Both services run on Railway; clients sync in real time over WebSocket (verified across the public internet). Next: real player controller + race levels. See `BRAINLIFT.md` for the daily log.
+**Feature-complete & deployed.** Real-time multiplayer, levels + progression, persistent
+leaderboard, polish (juice/SFX), and an 8-player stress test all done and live on Railway.
+See [`BRAINLIFT.md`](./BRAINLIFT.md) for the daily build log and [`docs/DEMO_SCRIPTS.md`](./docs/DEMO_SCRIPTS.md) for video scripts.
