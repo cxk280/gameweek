@@ -21,3 +21,6 @@
 .env.*
 !.env.example
 project/art_preview.png
+
+# Inspiration
+inspiration/
