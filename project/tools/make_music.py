@@ -234,25 +234,29 @@ def lake(bpm=116):
     return echo(mix, beat * 0.75, 0.26, 0.22)
 
 
-def terracotta(bpm=72):
-    """Renaissance choral: slow, modal, stacked voices + soft lute. A aeolian."""
+def terracotta(bpm=84):
+    """Warm golden-hour Renaissance: bright MAJOR choir + lute + a gentle uplifting lead. G major."""
     beat = 60.0 / bpm; bar = 4 * beat; bars = 8; total = int(bars * bar * SR) + SR
-    voice = np.zeros(total); lute = np.zeros(total); low = np.zeros(total)
+    voice = np.zeros(total); lute = np.zeros(total); low = np.zeros(total); lead = np.zeros(total)
     def place(buf, w, sb):
         s = int(sb * beat * SR); buf[s:s + len(w)] += w[:max(0, len(buf) - s)]
-    # modal progression: Am G F Em / Dm Am E Am (voicings as 3-note chords)
-    chords = [[57, 60, 64], [55, 59, 62], [53, 57, 60], [52, 55, 59],
-              [50, 53, 57], [57, 60, 64], [52, 56, 59], [57, 60, 64]]
+    # warm major progression: G D Em C / G C D G (bright, resolving)
+    chords = [[55, 59, 62], [54, 57, 62], [52, 55, 59], [48, 52, 55],
+              [55, 59, 62], [48, 52, 55], [54, 57, 62], [55, 59, 62]]
     for b in range(bars):
         for v in chords[b]:
-            place(voice, note("sine", v, bar * 1.02, 0.16, (0.5, 0.3, 0.85, 0.6), lp=2200), b * 4)
-            place(voice, note("tri", v + 12, bar * 1.02, 0.05, (0.6, 0.3, 0.8, 0.6), lp=2600), b * 4)
-        place(low, note("tri", chords[b][0] - 12, bar * 1.0, 0.22, (0.2, 0.3, 0.85, 0.4), lp=900), b * 4)
-        # soft lute arpeggio of the chord
+            place(voice, note("sine", v, bar * 1.02, 0.15, (0.3, 0.3, 0.85, 0.45), lp=2700), b * 4)
+            place(voice, note("tri", v + 12, bar * 1.02, 0.05, (0.35, 0.3, 0.8, 0.45), lp=2900), b * 4)
+        place(low, note("tri", chords[b][0] - 12, bar * 1.0, 0.22, (0.08, 0.3, 0.85, 0.3), lp=1000), b * 4)
         for k in range(4):
-            place(lute, note("pulse", chords[b][k % 3], beat * 0.9, 0.10, (0.005, 0.2, 0.2, 0.1), 0.004, 0.3, lp=3000), b * 4 + k)
-    mix = voice + lute + low
-    return echo(mix, beat * 0.66, 0.4, 0.34)     # long soft reverb-like tail
+            place(lute, note("pulse", chords[b][k % 3] + 12, beat * 0.85, 0.08, (0.004, 0.18, 0.2, 0.1), 0.004, 0.3, lp=3300), b * 4 + k)
+    mel = [(0.0, 2.0, 71), (2.0, 1.0, 74), (3.0, 1.0, 76), (4.0, 2.0, 74), (6.0, 2.0, 71),
+           (8.0, 2.0, 72), (10.0, 1.0, 71), (11.0, 1.0, 69), (12.0, 2.0, 67), (14.0, 2.0, 74),
+           (16.0, 2.0, 76), (18.0, 1.0, 74), (19.0, 1.0, 72), (20.0, 2.0, 71), (22.0, 2.0, 67),
+           (24.0, 2.0, 72), (26.0, 1.0, 74), (27.0, 1.0, 71), (28.0, 4.0, 67)]
+    for (sb, du, nt) in mel:
+        place(lead, note("tri", nt, du * beat * 0.95, 0.16, (0.03, 0.2, 0.6, 0.2), vib=0.3, lp=3500), sb)
+    return echo(voice + lute + low + lead, beat * 0.66, 0.28, 0.26)
 
 
 def brick(bpm=138):
@@ -303,9 +307,118 @@ def library(bpm=100):
     return echo(mix, beat * 0.66, 0.32, 0.3)
 
 
+def lunar(bpm=76):
+    """Moody, atmospheric, spacey: slow minor, soft pads + sparse bell. F minor."""
+    beat = 60.0 / bpm; bar = 4 * beat; bars = 8; total = int(bars * bar * SR) + SR
+    pad = np.zeros(total); bell = np.zeros(total); bass = np.zeros(total)
+    def place(buf, w, sb):
+        s = int(sb * beat * SR); buf[s:s + len(w)] += w[:max(0, len(buf) - s)]
+    chords = [[53, 56, 60], [48, 51, 55], [51, 55, 58], [48, 51, 55],
+              [44, 48, 51], [51, 55, 58], [53, 56, 60], [48, 51, 55]]
+    for b in range(bars):
+        for v in chords[b]:
+            place(pad, note("saw", v, bar * 1.02, 0.08, (0.6, 0.3, 0.85, 0.7), 0.012, lp=1700), b * 4)
+        place(bass, note("sine", chords[b][0] - 12, bar * 1.0, 0.24, (0.2, 0.3, 0.85, 0.5), lp=700), b * 4)
+    mel = [(0.0, 2.0, 72), (2.0, 1.0, 70), (3.0, 1.0, 68), (4.0, 3.0, 65), (7.0, 1.0, 68),
+           (8.0, 2.0, 75), (10.0, 2.0, 72), (12.0, 2.0, 68), (14.0, 2.0, 63),
+           (16.0, 2.0, 68), (18.0, 1.0, 70), (19.0, 1.0, 72), (20.0, 3.0, 70), (23.0, 1.0, 68),
+           (24.0, 2.0, 67), (26.0, 2.0, 63), (28.0, 4.0, 65)]
+    for (sb, du, nt) in mel:
+        place(bell, note("sine", nt, du * beat * 0.95, 0.20, (0.02, 0.4, 0.5, 0.5), lp=3000), sb)
+        place(bell, note("tri", nt + 12, du * beat * 0.5, 0.05, (0.02, 0.3, 0.3, 0.4), lp=3200), sb)
+    return echo(pad + bell + bass, beat * 0.75, 0.42, 0.36)
+
+
+def highland(bpm=104):
+    """Pastoral, adventurous, rolling: open major with light hand-percussion. G major."""
+    beat = 60.0 / bpm; bar = 4 * beat; bars = 8; total = int(bars * bar * SR) + SR
+    lead = np.zeros(total); pad = np.zeros(total); bass = np.zeros(total); perc = np.zeros(total)
+    def place(buf, w, sb):
+        s = int(sb * beat * SR); buf[s:s + len(w)] += w[:max(0, len(buf) - s)]
+    chords = [[55, 59, 62], [60, 64, 67], [62, 66, 69], [59, 62, 67],
+              [55, 59, 62], [57, 60, 64], [62, 66, 69], [55, 59, 62]]
+    for b in range(bars):
+        for v in chords[b]:
+            place(pad, note("saw", v, bar * 0.95, 0.07, (0.05, 0.2, 0.7, 0.3), 0.01, lp=2300), b * 4)
+        place(bass, note("tri", chords[b][0] - 12, beat * 1.7, 0.30, (0.005, 0.08, 0.7, 0.1), lp=1100), b * 4)
+        place(bass, note("tri", chords[b][0] - 5, beat * 1.7, 0.26, (0.005, 0.08, 0.7, 0.1), lp=1100), b * 4 + 2)
+    mel = [(0.0, 1.5, 74), (1.5, 0.5, 72), (2.0, 1.0, 71), (3.0, 1.0, 67), (4.0, 2.0, 69), (6.0, 2.0, 74),
+           (8.0, 1.0, 76), (9.0, 1.0, 74), (10.0, 1.5, 72), (11.5, 0.5, 71), (12.0, 2.0, 67), (14.0, 2.0, 69),
+           (16.0, 1.5, 71), (17.5, 0.5, 69), (18.0, 1.0, 67), (19.0, 1.0, 64), (20.0, 2.0, 62), (22.0, 2.0, 67),
+           (24.0, 1.0, 74), (25.0, 1.0, 72), (26.0, 1.5, 71), (27.5, 0.5, 69), (28.0, 4.0, 67)]
+    for (sb, du, nt) in mel:
+        place(lead, note("tri", nt, du * beat * 0.92, 0.22, (0.02, 0.15, 0.6, 0.15), vib=0.4, lp=3600), sb)
+    for b in range(bars):
+        place(perc, drum("kick", 0.18, 0.6), b * 4); place(perc, drum("kick", 0.16, 0.45), b * 4 + 1.5)
+        place(perc, note("tri", 80, 0.06, 0.10, (0.001, 0.04, 0.0, 0.03)), b * 4 + 2.0)
+        for e in range(4):
+            place(perc, drum("hat", 0.05, 0.12), b * 4 + e + 0.5)
+    return echo(lead + pad + bass + perc, beat * 0.66, 0.24, 0.2)
+
+
+def bay(bpm=112):
+    """Warm Latin bossa: jazzy maj7/ii-V, nylon comp, clave, smooth lead. C major."""
+    beat = 60.0 / bpm; bar = 4 * beat; bars = 8; total = int(bars * bar * SR) + SR
+    lead = np.zeros(total); gtr = np.zeros(total); bass = np.zeros(total); perc = np.zeros(total)
+    def place(buf, w, sb):
+        s = int(sb * beat * SR); buf[s:s + len(w)] += w[:max(0, len(buf) - s)]
+    chords = [[48, 52, 55, 59], [57, 60, 64, 67], [50, 53, 57, 60], [55, 59, 62, 65],
+              [48, 52, 55, 59], [57, 60, 64, 67], [50, 53, 57, 60], [55, 59, 62, 65]]
+    for b in range(bars):
+        ch = chords[b]
+        place(bass, note("tri", ch[0] - 12, beat * 0.9, 0.30, (0.005, 0.08, 0.7, 0.1), lp=1100), b * 4)
+        place(bass, note("tri", ch[2] - 12, beat * 0.9, 0.26, (0.005, 0.08, 0.7, 0.1), lp=1100), b * 4 + 2)
+        for sb2 in [0.5, 1.5, 2.0, 3.0, 3.5]:    # bossa offbeat comp
+            for v in ch[1:]:
+                place(gtr, note("pulse", v, beat * 0.4, 0.07, (0.004, 0.1, 0.1, 0.06), 0.005, 0.4, lp=2800), b * 4 + sb2)
+    mel = [(0.0, 1.0, 67), (1.0, 0.5, 71), (1.5, 0.5, 72), (2.0, 1.5, 76), (3.5, 0.5, 74), (4.0, 2.0, 72), (6.0, 1.5, 71), (7.5, 0.5, 67),
+           (8.0, 1.0, 69), (9.0, 1.0, 72), (10.0, 1.5, 74), (11.5, 0.5, 72), (12.0, 2.0, 71), (14.0, 2.0, 67),
+           (16.0, 1.0, 72), (17.0, 0.5, 76), (17.5, 0.5, 77), (18.0, 2.0, 79), (20.0, 2.0, 76), (22.0, 2.0, 72),
+           (24.0, 1.0, 74), (25.0, 1.0, 71), (26.0, 1.5, 69), (27.5, 0.5, 67), (28.0, 4.0, 60)]
+    for (sb, du, nt) in mel:
+        place(lead, note("tri", nt, du * beat * 0.9, 0.22, (0.01, 0.12, 0.6, 0.12), vib=0.5, lp=3800), sb)
+    for b in range(bars):
+        for cl in [0.0, 0.75, 1.5, 2.5, 3.0]:    # 3-2 clave on a woodblock
+            place(perc, note("tri", 82, 0.05, 0.12, (0.001, 0.035, 0.0, 0.03)), b * 4 + cl)
+        place(perc, drum("kick", 0.16, 0.5), b * 4); place(perc, drum("kick", 0.14, 0.4), b * 4 + 2)
+        for e in range(8):
+            place(perc, drum("hat", 0.04, 0.1), b * 4 + e * 0.5)
+    return echo(lead + gtr + bass + perc, beat * 0.75, 0.2, 0.18)
+
+
+def tower(bpm=130):
+    """Dark, mechanical, driving finale: pulsing minor bass, marching drums, ominous stabs. D minor."""
+    beat = 60.0 / bpm; bar = 4 * beat; bars = 8; total = int(bars * bar * SR) + SR
+    lead = np.zeros(total); stab = np.zeros(total); bass = np.zeros(total); perc = np.zeros(total)
+    def place(buf, w, sb):
+        s = int(sb * beat * SR); buf[s:s + len(w)] += w[:max(0, len(buf) - s)]
+    roots = [50, 50, 46, 45, 50, 50, 46, 45]                 # Dm Dm Bb A ...
+    chords = [[50, 53, 57], [50, 53, 57], [46, 50, 53], [45, 49, 52],
+              [50, 53, 57], [50, 53, 57], [46, 50, 53], [45, 49, 52]]
+    for b in range(bars):
+        for e in range(8):                                   # driving 8th-note bass pulse
+            place(bass, note("pulse", roots[b] - 12, beat * 0.42, 0.30, (0.003, 0.05, 0.6, 0.04), 0.004, 0.5, lp=1300), b * 4 + e * 0.5)
+        for v in chords[b]:                                  # ominous brass-ish stab on the downbeat
+            place(stab, note("saw", v, beat * 0.8, 0.10, (0.01, 0.15, 0.3, 0.1), 0.012, lp=2400), b * 4)
+            place(stab, note("saw", v, beat * 0.8, 0.10, (0.01, 0.15, 0.3, 0.1), 0.012, lp=2400), b * 4 + 2)
+    mel = [(0.0, 1.0, 69), (1.0, 1.0, 68), (2.0, 1.0, 65), (3.0, 1.0, 69), (4.0, 2.0, 70), (6.0, 1.0, 69), (7.0, 1.0, 65),
+           (8.0, 1.0, 69), (9.0, 1.0, 68), (10.0, 1.0, 65), (11.0, 1.0, 62), (12.0, 4.0, 64),
+           (16.0, 1.0, 72), (17.0, 1.0, 70), (18.0, 1.0, 69), (19.0, 1.0, 65), (20.0, 2.0, 67), (22.0, 2.0, 69),
+           (24.0, 1.0, 70), (25.0, 1.0, 69), (26.0, 1.0, 65), (27.0, 1.0, 64), (28.0, 4.0, 62)]
+    for (sb, du, nt) in mel:
+        place(lead, note("pulse", nt, du * beat * 0.9, 0.18, (0.01, 0.1, 0.5, 0.1), 0.006, 0.5, vib=0.4, lp=3200), sb)
+    for b in range(bars):
+        for e in range(4):
+            place(perc, drum("kick", 0.15, 0.85), b * 4 + e)         # four-on-the-floor march
+        place(perc, drum("snare", 0.16, 0.6), b * 4 + 1); place(perc, drum("snare", 0.16, 0.6), b * 4 + 3)
+        for e in range(8):
+            place(perc, drum("hat", 0.04, 0.16), b * 4 + e * 0.5)
+    return echo(lead + stab + bass + perc, beat * 0.5, 0.22, 0.2)
+
+
 def render(stage):
-    fn = {"city": city, "town": town, "lake": lake, "terracotta": terracotta,
-          "brick": brick, "library": library}.get(stage)
+    fn = {"city": city, "town": town, "lake": lake, "terracotta": terracotta, "brick": brick,
+          "library": library, "lunar": lunar, "highland": highland, "bay": bay, "tower": tower}.get(stage)
     if fn is None:
         raise SystemExit("unknown stage: " + stage)
     mono = fn()
