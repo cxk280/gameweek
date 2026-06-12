@@ -15,19 +15,27 @@ func _init(can_cancel := false) -> void:
 
 func _ready() -> void:
 	var dim := ColorRect.new()
-	dim.color = Color(0.02, 0.02, 0.05, 0.82)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0.02, 0.02, 0.05, 0.88)
+	dim.anchor_right = 1.0
+	dim.anchor_bottom = 1.0
+	dim.offset_right = 0.0
+	dim.offset_bottom = 0.0
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(dim)
 
+	# CenterContainer fills the screen and centers the menu box reliably
+	var center := CenterContainer.new()
+	center.anchor_right = 1.0
+	center.anchor_bottom = 1.0
+	center.offset_right = 0.0
+	center.offset_bottom = 0.0
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dim.add_child(center)
+
 	var box := VBoxContainer.new()
-	box.set_anchors_preset(Control.PRESET_CENTER)
-	box.position = Vector2(640, 360)
-	box.custom_minimum_size = Vector2(420, 0)
+	box.custom_minimum_size = Vector2(460, 0)
 	box.add_theme_constant_override("separation", 6)
-	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	box.grow_vertical = Control.GROW_DIRECTION_BOTH
-	dim.add_child(box)
+	center.add_child(box)
 
 	var title := Label.new()
 	title.text = "SELECT STAGE"
