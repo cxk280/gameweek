@@ -287,18 +287,61 @@ func _format_time(t: float) -> String:
 	return "%d:%02d.%03d" % [total_ms / 60000, (total_ms / 1000) % 60, total_ms % 1000]
 
 
+const THEME_SKY := {
+	"city": [Color8(7, 8, 22), Color8(24, 16, 44)],
+	"town": [Color8(150, 150, 174), Color8(232, 202, 184)],
+	"lake": [Color8(70, 140, 220), Color8(175, 210, 230)],
+	"terracotta": [Color8(110, 140, 190), Color8(245, 205, 150)],
+	"brick": [Color8(150, 155, 165), Color8(202, 202, 206)],
+	"library": [Color8(70, 52, 34), Color8(120, 92, 56)],
+	"lunar": [Color8(5, 5, 12), Color8(12, 12, 22)],
+	"highland": [Color8(92, 150, 210), Color8(192, 216, 236)],
+	"bay": [Color8(70, 150, 225), Color8(182, 216, 236)],
+	"tower": [Color8(40, 55, 95), Color8(235, 150, 70)],
+}
+
+
 func _build_backdrop(theme: String) -> void:
-	# 2.5D parallax built off the main thread so level transitions don't hitch. The static sky
-	# shows immediately; depth layers (distant ones barely move, nearer rows track the camera)
-	# are mounted when the worker finishes (~2s). Latest requested theme always wins.
+	# 2.5D parallax built off the main thread so transitions don't hitch. On a theme change the
+	# previous stage's layers are dropped immediately and the new theme's sky is shown at once, so
+	# a stage never renders mixed with the previous one; detailed depth layers mount ~2s later.
 	_bg_want_theme = theme
 	_set_tower(theme == "tower")
 	_set_music(theme)
 	if theme == _backdrop_theme and _bg != null:
 		return
+	if _bg != null:
+		_bg.queue_free()
+		_bg = null
+	_ensure_sky_rect()
+	_sky_rect.texture = _placeholder_sky(theme)
 	if _bg_busy:
 		return
 	_start_backdrop_build(theme)
+
+
+func _ensure_sky_rect() -> void:
+	if _sky_rect != null:
+		return
+	var skybg := $Sky.get_node_or_null("SkyBG")
+	if skybg:
+		skybg.queue_free()
+	_sky_rect = TextureRect.new()
+	_sky_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sky_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_sky_rect.stretch_mode = TextureRect.STRETCH_SCALE
+	_sky_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	$Sky.add_child(_sky_rect)
+
+
+func _placeholder_sky(theme: String) -> ImageTexture:
+	# instant 2-colour sky gradient for the new theme while its full backdrop builds
+	var cols: Array = THEME_SKY.get(theme, THEME_SKY["city"])
+	var img := Image.create(4, 128, false, Image.FORMAT_RGBA8)
+	for y in range(128):
+		var c: Color = (cols[0] as Color).lerp(cols[1] as Color, float(y) / 127.0)
+		img.fill_rect(Rect2i(0, y, 4, 1), c)
+	return ImageTexture.create_from_image(img)
 
 
 func _set_music(theme: String) -> void:
@@ -373,16 +416,7 @@ func _mount_backdrop(data: Dictionary) -> void:
 	# Main thread: turn the painted Images into textures + ParallaxLayers.
 	if _bg != null:
 		_bg.queue_free()
-	if _sky_rect == null:
-		var skybg := $Sky.get_node_or_null("SkyBG")
-		if skybg:
-			skybg.queue_free()
-		_sky_rect = TextureRect.new()
-		_sky_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-		_sky_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		_sky_rect.stretch_mode = TextureRect.STRETCH_SCALE
-		_sky_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		$Sky.add_child(_sky_rect)
+	_ensure_sky_rect()
 	_sky_rect.texture = ImageTexture.create_from_image(data["sky"])
 	_bg = ParallaxBackground.new()
 	_bg.layer = -5
