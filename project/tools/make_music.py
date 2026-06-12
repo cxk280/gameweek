@@ -422,14 +422,20 @@ def render(stage):
     if fn is None:
         raise SystemExit("unknown stage: " + stage)
     mono = fn()
+    # Seamless loop: each composition is `musical length + 1s` (echo tail). Fold that tail back
+    # into the start so the decay from the end wraps into the beginning, then keep only the exact
+    # musical length — so looping the whole file has no gap or click at the loop point.
+    loop_n = len(mono) - SR
+    tail = mono[loop_n:]
+    mono = mono[:loop_n].copy()
+    mono[:len(tail)] += tail
     mono = lowpass(mono, 9000)                  # master treble softening
     mono = np.tanh(mono * 1.1)                  # gentle saturation/limit
     mono /= max(1e-6, np.max(np.abs(mono)))
     mono *= 0.92
-    # light stereo widening via a short echo offset between channels
-    left = mono
-    right = np.concatenate([np.zeros(int(0.011 * SR)), mono])[:len(mono)]
-    stereo = np.stack([left, right * 0.96], axis=1)
+    # light stereo widening; np.roll wraps circularly so it stays loop-seamless
+    right = np.roll(mono, int(0.011 * SR))
+    stereo = np.stack([mono, right * 0.96], axis=1)
     return stereo
 
 

@@ -250,7 +250,7 @@ func _on_finish() -> void:
 		Net.report_finish(int(_race_time * 1000.0))
 		banner.text = "FINISHED  " + _format_time(_race_time)
 	else:
-		banner.text = "FINISH!  " + _format_time(_race_time)
+		banner.text = "FINISH!  %s\nENTER: next stage     R: retry" % _format_time(_race_time)
 	print("[FINISH] time=%s" % _format_time(_race_time))
 
 
@@ -388,13 +388,25 @@ func bounds_w() -> float:
 
 
 func _input(event: InputEvent) -> void:
-	# R restarts the run locally — only in free-run mode (race resets are server-driven).
-	if _race_mode:
+	# Free-run only (race resets are server-driven): R retries the stage; after finishing,
+	# ENTER/SPACE advances to the next stage (cycling all courses, swapping backdrop + music).
+	if _race_mode or _local == null:
 		return
-	if event is InputEventKey and event.pressed and event.keycode == KEY_R and _local:
+	if not (event is InputEventKey and event.pressed):
+		return
+	var key: int = (event as InputEventKey).keycode
+	if key == KEY_R:
 		_local.respawn_pos = level.start_pos
 		_local.global_position = level.start_pos
 		_local.respawn()
+		_local.finished = false
+		_race_time = 0.0
+		_timing = false
+		_finished = false
+		banner.text = ""
+	elif _finished and (key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_SPACE):
+		_ensure_level((_current_level + 1) % Levels.ALL.size())
+		_reset_to_start()
 		_local.finished = false
 		_race_time = 0.0
 		_timing = false
