@@ -5,6 +5,7 @@ extends Node2D
 ## connected to a server it falls back to free-run (single-player time trial).
 
 const Backdrop := preload("res://scripts/Backdrop.gd")
+const StageSelectLib := preload("res://scripts/StageSelect.gd")
 const GhostScene := preload("res://scenes/Player.tscn")
 const LocalScene := preload("res://scenes/player/LocalPlayer.tscn")
 const SelectScene := preload("res://scenes/CharacterSelect.tscn")
@@ -33,6 +34,7 @@ var _tower_layer: CanvasLayer = null
 var _tower_spin: Sprite2D = null
 var _music: AudioStreamPlayer = null
 var _music_theme := ""
+var _stage_menu: Node = null
 
 @onready var level: Level = $Level
 @onready var players: Node2D = $Players
@@ -84,6 +86,32 @@ func _on_character_chosen(char_id: String) -> void:
 	_spawn_local()
 	if not _race_mode:
 		banner.text = ""
+		_open_stage_select(false)   # free-run: pick a starting stage
+
+
+func _open_stage_select(can_cancel: bool) -> void:
+	if _stage_menu != null and is_instance_valid(_stage_menu):
+		return
+	_stage_menu = StageSelectLib.new(can_cancel)
+	add_child(_stage_menu)
+	_stage_menu.chosen.connect(_on_stage_chosen)
+	if _local:
+		_local.input_enabled = false
+	_stage_menu.tree_exited.connect(func() -> void:
+		if _local and not _finished:
+			_local.input_enabled = true)
+
+
+func _on_stage_chosen(index: int) -> void:
+	_ensure_level(index)
+	_reset_to_start()
+	if _local:
+		_local.finished = false
+		_local.input_enabled = true
+	_race_time = 0.0
+	_timing = false
+	_finished = false
+	banner.text = ""
 
 
 func _on_race_event(phase: String, payload: Dictionary) -> void:
@@ -395,6 +423,9 @@ func _input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed):
 		return
 	var key: int = (event as InputEventKey).keycode
+	if key == KEY_TAB:
+		_open_stage_select(true)            # in-run stage menu (Esc to close)
+		return
 	if key == KEY_R:
 		_local.respawn_pos = level.start_pos
 		_local.global_position = level.start_pos
