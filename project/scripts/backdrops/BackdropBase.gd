@@ -13,6 +13,7 @@ extends RefCounted
 var _img: Image
 var _w: int
 var _h: int
+var _scratch: Image   # reusable buffer so alpha fills can use C++ blend_rect, not per-pixel
 
 
 ## Allocate a fresh transparent layer image and make it the current draw target.
@@ -39,9 +40,31 @@ func _px(x: int, y: int, c: Color) -> void:
 
 
 func _rect(x: int, y: int, w: int, h: int, c: Color) -> void:
-	for yy in range(y, y + h):
-		for xx in range(x, x + w):
-			_px(xx, yy, c)
+	if c.a >= 0.999:
+		# fast C++ path for opaque fills (building bodies, etc.)
+		var rx := maxi(x, 0)
+		var ry := maxi(y, 0)
+		var rw := mini(x + w, _w) - rx
+		var rh := mini(y + h, _h) - ry
+		if rw > 0 and rh > 0:
+			_img.fill_rect(Rect2i(rx, ry, rw, rh), Color(c.r, c.g, c.b, 1.0))
+		return
+	# alpha fill: composite via C++ blend_rect using a reusable scratch buffer (fast)
+	var rx := maxi(x, 0)
+	var ry := maxi(y, 0)
+	var rw := mini(x + w, _w) - rx
+	var rh := mini(y + h, _h) - ry
+	if rw <= 0 or rh <= 0:
+		return
+	if rw <= 1024 and rh <= 1024:
+		if _scratch == null or _scratch.get_width() < rw or _scratch.get_height() < rh:
+			_scratch = Image.create(maxi(1024, rw), maxi(1024, rh), false, Image.FORMAT_RGBA8)
+		_scratch.fill_rect(Rect2i(0, 0, rw, rh), c)
+		_img.blend_rect(_scratch, Rect2i(0, 0, rw, rh), Vector2i(rx, ry))
+	else:
+		for yy in range(ry, ry + rh):
+			for xx in range(rx, rx + rw):
+				_px(xx, yy, c)
 
 
 func _disc(center: Vector2, r: float, c: Color) -> void:
@@ -88,5 +111,4 @@ func _envelope(x: float) -> float:
 func _vgrad(top: Color, bottom: Color, curve := 1.0) -> void:
 	for y in range(_h):
 		var row := top.lerp(bottom, pow(float(y) / float(_h), curve))
-		for x in range(_w):
-			_img.set_pixel(x, y, row)
+		_img.fill_rect(Rect2i(0, y, _w, 1), Color(row.r, row.g, row.b, 1.0))
