@@ -7,7 +7,7 @@ in `project/tools/` (the committed source of truth); regenerate any of them from
 Per stage:
 - `start.png` — the 1280×720 spawn view at full detail.
 - `panorama.png` — a 4800-wide render to judge length, variety, and no-repeat.
-- (Stage 6 also has `ascent.png` and `turntable.png` for the tower concept.)
+- (Stage 10, the spire finale, also has `ascent.png` and `turntable.png` for the tower concept.)
 
 All stages and place names are original/fantasy.
 
@@ -18,8 +18,8 @@ All stages and place names are original/fantasy.
 | 3 | Stilt Harbor | `lake` | bright lake stilt-village |
 | 4 | Terracotta Heights | `terracotta` | golden-hour rooftop city |
 | 5 | Foundry Flats | `brick` | overcast brick valley town |
-| 6 | The Obsidian Spire | `tower` | climb beneath a rotating tower |
+| 6 | The Grand Athenaeum | `library` | opulent library interior |
 | 7 | Selene Outpost | `lunar` | lunar colony under Earthrise |
 | 8 | Highland Bastion | `highland` | dry-highland capital |
 | 9 | Cabana Bay | `bay` | tropical bay of green peaks |
-| 10 | The Grand Athenaeum | `library` | opulent library interior |
+| 10 | The Obsidian Spire | `tower` | climb beneath a rotating tower (finale) |

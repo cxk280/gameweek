@@ -119,9 +119,9 @@ static var ALL: Array = [
 	_course("Stilt Harbor",      "lake",       3, 8600.0, 540.0, 110.0, 120.0, 200.0, 180.0, 420.0,   0.0, 4),  # 3
 	_course("Terracotta Heights","terracotta", 4, 8800.0, 520.0, 170.0,  90.0, 180.0, 200.0, 460.0,   0.0, 3),  # 4
 	_course("Foundry Flats",     "brick",      5, 8000.0, 560.0,  90.0, 100.0, 190.0, 220.0, 480.0,   0.0, 4),  # 5
-	_course("The Obsidian Spire","tower",      6, 8400.0, 640.0, 120.0, 100.0, 180.0, 200.0, 420.0, 250.0, 3),  # 6 climbs
+	_course("The Grand Athenaeum","library",  10, 8200.0, 540.0, 120.0,  90.0, 175.0, 200.0, 440.0,   0.0, 3),  # 6 interior
 	_course("Selene Outpost",    "lunar",      7, 8600.0, 540.0, 150.0, 120.0, 200.0, 180.0, 420.0,   0.0, 3),  # 7
 	_course("Highland Bastion",  "highland",   8, 8800.0, 520.0, 160.0,  90.0, 180.0, 200.0, 460.0,   0.0, 3),  # 8
 	_course("Cabana Bay",        "bay",        9, 8400.0, 560.0, 100.0, 110.0, 195.0, 200.0, 460.0,   0.0, 4),  # 9
-	_course("The Grand Athenaeum","library",  10, 8200.0, 540.0, 120.0,  90.0, 175.0, 200.0, 440.0,   0.0, 3),  # 10 interior
+	_course("The Obsidian Spire","tower",      6, 8400.0, 640.0, 120.0, 100.0, 180.0, 200.0, 420.0, 250.0, 3),  # 10 climbs (finale)
 ]

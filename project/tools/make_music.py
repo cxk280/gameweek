@@ -154,8 +154,54 @@ def city(bpm=124):
     return mix
 
 
+def town(bpm=110):
+    """Dusk old-town / lantern quarter: calm, warm, Eastern pentatonic. D minor pentatonic."""
+    beat = 60.0 / bpm
+    bar = 4 * beat
+    bars = 8
+    total = int(bars * bar * SR) + SR
+    lead = np.zeros(total); pad = np.zeros(total); bass = np.zeros(total); perc = np.zeros(total)
+
+    def place(buf, w, start_beat):
+        s = int(start_beat * beat * SR)
+        buf[s:s + len(w)] += w[:max(0, len(buf) - s)]
+
+    # sustained open-fifth drone (D-A) that swells each bar — lanterns at dusk
+    for b in range(bars):
+        place(pad, note("saw", 50, bar * 0.98, 0.09, (0.4, 0.2, 0.8, 0.4), 0.01, lp=1500), b * 4)
+        place(pad, note("saw", 57, bar * 0.98, 0.08, (0.4, 0.2, 0.8, 0.4), 0.01, lp=1500), b * 4)
+    # soft bass: root/fifth, gentle
+    bassline = [50, 57, 50, 53, 50, 57, 48, 50]
+    for b in range(bars):
+        place(bass, note("tri", bassline[b], beat * 1.8, 0.30, (0.01, 0.1, 0.8, 0.2), lp=1100), b * 4)
+        place(bass, note("tri", bassline[b] + 7, beat * 1.6, 0.24, (0.01, 0.1, 0.8, 0.2), lp=1100), b * 4 + 2)
+
+    # original koto-like pentatonic melody (plucked: short decay)
+    pluck = (0.004, 0.14, 0.18, 0.10)
+    mel = [
+        (0.0, 1.0, 74), (1.0, 1.0, 72), (2.0, 1.5, 69), (3.5, 0.5, 67), (4.0, 2.0, 65), (6.0, 2.0, 69),
+        (8.0, 1.0, 72), (9.0, 1.0, 74), (10.0, 1.5, 77), (11.5, 0.5, 74), (12.0, 2.0, 72), (14.0, 2.0, 69),
+        (16.0, 1.0, 67), (17.0, 1.0, 69), (18.0, 1.5, 72), (19.5, 0.5, 69), (20.0, 2.0, 67), (22.0, 2.0, 65),
+        (24.0, 1.0, 69), (25.0, 1.0, 72), (26.0, 1.5, 74), (27.5, 0.5, 72), (28.0, 1.0, 69), (29.0, 1.0, 67), (30.0, 2.0, 62),
+    ]
+    for (sb, du, nt) in mel:
+        place(lead, note("pulse", nt, du * beat * 0.9, 0.24, pluck, 0.005, 0.35, vib=0.25, lp=3200), sb)
+        place(lead, note("tri", nt, du * beat * 0.5, 0.10, pluck, lp=2400), sb)  # soft body under the pluck
+
+    # sparse soft percussion: a low taiko-ish hit on bar 1, woodblock offbeats
+    for b in range(bars):
+        place(perc, drum("kick", 0.22, 0.7), b * 4)
+        place(perc, drum("kick", 0.20, 0.4), b * 4 + 2.5)
+        for e in [1.0, 3.0]:
+            place(perc, note("tri", 84, 0.05, 0.10, (0.001, 0.03, 0.0, 0.02)), b * 4 + e)  # woodblock click
+
+    mix = lead + pad + bass + perc
+    mix = echo(mix, beat * 0.5, 0.34, 0.30)
+    return mix
+
+
 def render(stage):
-    fn = {"city": city}.get(stage)
+    fn = {"city": city, "town": town}.get(stage)
     if fn is None:
         raise SystemExit("unknown stage: " + stage)
     mono = fn()
