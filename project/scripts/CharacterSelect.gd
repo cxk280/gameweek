@@ -59,7 +59,7 @@ func _build() -> void:
 		row.add_child(_make_card(id))
 
 	var hint := Label.new()
-	hint.text = "Arrow keys / A-D move · Space jump · Shift dash"
+	hint.text = "Arrows / A-D move  ·  Space jump  ·  Shift dash  ·  gamepad supported\nTab: change stage  ·  R: restart  ·  after finishing, Enter: next stage"
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_color_override("font_color", Color(0.7, 0.72, 0.85))
 	col.add_child(hint)

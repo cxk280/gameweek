@@ -74,6 +74,13 @@ func _setup_input() -> void:
 	_add_action("move_right", [KEY_D, KEY_RIGHT])
 	_add_action("jump", [KEY_SPACE, KEY_W, KEY_UP])
 	_add_action("dash", [KEY_SHIFT])
+	# gamepad: left stick / d-pad to move, A to jump, X to dash
+	_add_joy_axis("move_left", JOY_AXIS_LEFT_X, -1.0)
+	_add_joy_axis("move_right", JOY_AXIS_LEFT_X, 1.0)
+	_add_joy_button("move_left", JOY_BUTTON_DPAD_LEFT)
+	_add_joy_button("move_right", JOY_BUTTON_DPAD_RIGHT)
+	_add_joy_button("jump", JOY_BUTTON_A)
+	_add_joy_button("dash", JOY_BUTTON_X)
 
 
 func _add_action(action: String, physical_keys: Array) -> void:
@@ -84,6 +91,23 @@ func _add_action(action: String, physical_keys: Array) -> void:
 		var ev := InputEventKey.new()
 		ev.physical_keycode = k
 		InputMap.action_add_event(action, ev)
+
+
+func _add_joy_button(action: String, button: int) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action)
+	var ev := InputEventJoypadButton.new()
+	ev.button_index = button
+	InputMap.action_add_event(action, ev)
+
+
+func _add_joy_axis(action: String, axis: int, dir: float) -> void:
+	if not InputMap.has_action(action):
+		InputMap.add_action(action)
+	var ev := InputEventJoypadMotion.new()
+	ev.axis = axis
+	ev.axis_value = dir
+	InputMap.action_add_event(action, ev)
 
 
 func _port() -> int:

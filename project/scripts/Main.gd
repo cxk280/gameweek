@@ -35,6 +35,9 @@ var _tower_spin: Sprite2D = null
 var _music: AudioStreamPlayer = null
 var _music_theme := ""
 var _stage_menu: Node = null
+var _shot_path := ""    # test hook: --shot=path captures the viewport then quits
+var _shot_t := 0.0
+var _shot_delay := 8.0
 
 @onready var level: Level = $Level
 @onready var players: Node2D = $Players
@@ -47,6 +50,11 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	_racebot = args.has("--racebot")
 	_auto = args.has("--auto") or _racebot
+	for a in args:
+		if a.begins_with("--shot="):
+			_shot_path = a.split("=")[1]
+		elif a.begins_with("--shotdelay="):
+			_shot_delay = float(a.split("=")[1])
 	Net.players_updated.connect(_on_players_updated)
 	if Net.is_server:
 		return
@@ -86,6 +94,12 @@ func _on_character_chosen(char_id: String) -> void:
 	_spawn_local()
 	if not _race_mode:
 		banner.text = ""
+		var h := Label.new()
+		h.text = "Tab: stages   ·   R: restart"
+		h.add_theme_font_size_override("font_size", 16)
+		h.modulate = Color(1, 1, 1, 0.5)
+		h.position = Vector2(16, 692)
+		$HUD.add_child(h)
 		_open_stage_select(false)   # free-run: pick a starting stage
 
 
@@ -213,6 +227,13 @@ func _physics_process(delta: float) -> void:
 	if Net.is_server:
 		info.text = "SERVER · players=%d" % Net.states.size()
 		return
+	if _shot_path != "":
+		_shot_t += delta
+		if _shot_t > _shot_delay:
+			get_viewport().get_texture().get_image().save_png(_shot_path)
+			print("[shot] saved %s" % _shot_path)
+			get_tree().quit()
+			return
 	if _local:
 		Net.local_pos = _local.global_position
 		if _tower_spin != null and _tower_layer.visible:
