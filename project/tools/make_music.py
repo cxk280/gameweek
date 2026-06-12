@@ -307,7 +307,7 @@ def library(bpm=100):
     return echo(mix, beat * 0.66, 0.32, 0.3)
 
 
-def lunar(bpm=76):
+def lunar(bpm=86):
     """Moody, atmospheric, spacey: slow minor, soft pads + sparse bell. F minor."""
     beat = 60.0 / bpm; bar = 4 * beat; bars = 8; total = int(bars * bar * SR) + SR
     pad = np.zeros(total); bell = np.zeros(total); bass = np.zeros(total)
