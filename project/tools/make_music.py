@@ -138,7 +138,7 @@ def city(bpm=124):
         (28.0, 1.0, 62), (29.0, 1.0, 64), (30.0, 2.0, 57),
     ]
     for (sb, du, nt) in mel:
-        place(lead, note("pulse", nt, du * beat * 0.95, 0.26, (0.01, 0.08, 0.6, 0.12), 0.006, 0.5, vib=1.0, lp=3800), sb)
+        place(lead, note("pulse", nt, du * beat * 0.95, 0.26, (0.01, 0.08, 0.6, 0.12), 0.006, 0.5, vib=0.4, lp=3800), sb)
 
     # drums: kick 1&3, snare 2&4, hats on eighths
     for b in range(bars):
