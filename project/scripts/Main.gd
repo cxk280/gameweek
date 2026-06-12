@@ -26,6 +26,11 @@ var _current_level := -1
 var _bg: ParallaxBackground = null
 var _sky_rect: TextureRect = null
 var _backdrop_theme := ""
+var _bg_thread: Thread = null
+var _bg_want_theme := ""
+var _bg_busy := false
+var _tower_layer: CanvasLayer = null
+var _tower_spin: Sprite2D = null
 
 @onready var level: Level = $Level
 @onready var players: Node2D = $Players
@@ -180,6 +185,11 @@ func _physics_process(delta: float) -> void:
 		return
 	if _local:
 		Net.local_pos = _local.global_position
+		if _tower_spin != null and _tower_layer.visible:
+			var sx := level.start_pos.x
+			var fx := level.finish_pos.x
+			var p := clampf((_local.global_position.x - sx) / maxf(fx - sx, 1.0), 0.0, 1.0)
+			_tower_spin.frame = int(p * 24.0 * 2.0) % 24   # ~2 turns over the climb
 		# Free-run mode starts timing on first movement; race mode is gated by the GO event.
 		if not _race_mode and not _timing and not _finished and absf(_local.velocity.x) > 1.0:
 			_timing = true
@@ -248,15 +258,66 @@ func _format_time(t: float) -> String:
 
 
 func _build_backdrop(theme: String) -> void:
-	# 2.5D parallax: a static sky gradient plus depth layers that scroll at increasing speeds,
-	# so distant bodies (moon/stars) barely move while nearer building rows track the camera.
+	# 2.5D parallax built off the main thread so level transitions don't hitch. The static sky
+	# shows immediately; depth layers (distant ones barely move, nearer rows track the camera)
+	# are mounted when the worker finishes (~2s). Latest requested theme always wins.
+	_bg_want_theme = theme
+	_set_tower(theme == "tower")
 	if theme == _backdrop_theme and _bg != null:
 		return
+	if _bg_busy:
+		return
+	_start_backdrop_build(theme)
+
+
+func _set_tower(on: bool) -> void:
+	# The spire stage's signature: a colossal tower looming behind the climb that turns as the
+	# player ascends (frame advanced from progress in _physics_process). Behind the play field.
+	if on and _tower_spin == null:
+		var tex := load("res://assets/tower_spin.png") as Texture2D
+		if tex == null:
+			return
+		_tower_layer = CanvasLayer.new()
+		_tower_layer.layer = -4
+		add_child(_tower_layer)
+		_tower_spin = Sprite2D.new()
+		_tower_spin.texture = tex
+		_tower_spin.hframes = 24
+		_tower_spin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_tower_spin.position = Vector2(640, 360)
+		_tower_spin.scale = Vector2(1.25, 1.25)
+		_tower_layer.add_child(_tower_spin)
+	if _tower_layer != null:
+		_tower_layer.visible = on
+
+
+func _start_backdrop_build(theme: String) -> void:
+	_bg_busy = true
+	_bg_thread = Thread.new()
+	_bg_thread.start(_backdrop_worker.bind(theme, bounds_w()))
+
+
+func _backdrop_worker(theme: String, level_w: float) -> void:
+	# Runs on a background thread: paints the layer Images (no scene-tree access).
+	var data := Backdrop.new().build(theme, level_w, 1280, 720)
+	call_deferred("_backdrop_ready", theme, data)
+
+
+func _backdrop_ready(theme: String, data: Dictionary) -> void:
+	if _bg_thread != null:
+		_bg_thread.wait_to_finish()
+		_bg_thread = null
+	_bg_busy = false
+	_mount_backdrop(data)
 	_backdrop_theme = theme
+	if _bg_want_theme != theme:
+		_start_backdrop_build(_bg_want_theme)   # a newer theme was requested mid-build
+
+
+func _mount_backdrop(data: Dictionary) -> void:
+	# Main thread: turn the painted Images into textures + ParallaxLayers.
 	if _bg != null:
 		_bg.queue_free()
-	var data := Backdrop.new().build(theme, bounds_w(), 1280, 720)
-	# static full-viewport sky (no parallax)
 	if _sky_rect == null:
 		var skybg := $Sky.get_node_or_null("SkyBG")
 		if skybg:
@@ -268,7 +329,6 @@ func _build_backdrop(theme: String) -> void:
 		_sky_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		$Sky.add_child(_sky_rect)
 	_sky_rect.texture = ImageTexture.create_from_image(data["sky"])
-	# parallax depth layers (back -> front), bottom-anchored to the level horizon
 	_bg = ParallaxBackground.new()
 	_bg.layer = -5
 	add_child(_bg)
@@ -288,6 +348,12 @@ func _build_backdrop(theme: String) -> void:
 		spr.position = Vector2(left, top)
 		layer.add_child(spr)
 		_bg.add_child(layer)
+
+
+func _exit_tree() -> void:
+	if _bg_thread != null:
+		_bg_thread.wait_to_finish()
+		_bg_thread = null
 
 
 func bounds_w() -> float:
