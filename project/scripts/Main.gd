@@ -31,6 +31,8 @@ var _bg_want_theme := ""
 var _bg_busy := false
 var _tower_layer: CanvasLayer = null
 var _tower_spin: Sprite2D = null
+var _music: AudioStreamPlayer = null
+var _music_theme := ""
 
 @onready var level: Level = $Level
 @onready var players: Node2D = $Players
@@ -263,11 +265,36 @@ func _build_backdrop(theme: String) -> void:
 	# are mounted when the worker finishes (~2s). Latest requested theme always wins.
 	_bg_want_theme = theme
 	_set_tower(theme == "tower")
+	_set_music(theme)
 	if theme == _backdrop_theme and _bg != null:
 		return
 	if _bg_busy:
 		return
 	_start_backdrop_build(theme)
+
+
+func _set_music(theme: String) -> void:
+	# Per-stage looping background music (one original track per theme). Tracks are added over
+	# time; a theme with no track plays nothing.
+	if theme == _music_theme:
+		return
+	if _music == null:
+		_music = AudioStreamPlayer.new()
+		_music.volume_db = -7.0
+		add_child(_music)
+	var path := "res://audio/music/%s.wav" % theme
+	if not ResourceLoader.exists(path):
+		_music.stop()
+		_music_theme = ""
+		return
+	var s := load(path)
+	if s is AudioStreamWAV:
+		s.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		s.loop_begin = 0
+		s.loop_end = int(s.get_length() * float(s.mix_rate))
+	_music.stream = s
+	_music.play()
+	_music_theme = theme
 
 
 func _set_tower(on: bool) -> void:
