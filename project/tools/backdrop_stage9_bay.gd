@@ -352,44 +352,60 @@ func _hillside_houses() -> void:
 	for lm in _landmark_spots():
 		var rad := 150.0 if int(lm.y) == 0 else (120.0 if int(lm.y) == 1 else 96.0)
 		clear.append(Vector2(lm.x, rad))
+	# Houses come in tight clustered patches (a run of packed columns) separated by genuinely
+	# wide gaps of bare green slope. The gap uses a squared hash so big openings are common and
+	# the clustering reads organically uneven rather than an even speckle.
 	var i := 0
 	var x := 6.0
 	while x < W - 6.0:
-		var s := 6000 + i
-		var box := 7 + int(_h(s * 9) * 4)
-		var skip := false
+		# is this start position inside a landmark clear-zone? if so, hop past it
+		var inzone := false
 		for cz in clear:
 			if absf(x - cz.x) < cz.y:
-				skip = true
+				x = cz.x + cz.y + 4.0
+				inzone = true
 				break
-		if skip:
-			x += float(box) + 1.0
+		if inzone:
 			i += 1
 			continue
-		var ridge := _near_ridge(x)
-		# top of this column's houses: a little below the ridge, with a deterministic band depth
-		var depth := 24.0 + _h(s * 7 + 1) * 70.0
-		var col_top := ridge + 14.0 + _h(s * 5 + 2) * 26.0
-		var col_bot := minf(col_top + depth, float(shore))
-		# leave gaps so vegetation shows between house clusters
-		if _h(s * 11) < 0.30:
-			x += float(box) + 2.0
-			i += 1
-			continue
-		var y := col_top
-		var row := 0
-		while y < col_bot:
-			var idx := s * 131 + row * 23
-			if _h(idx * 3) > 0.16:   # a few blanks = greenery peeking through
-				var c: Color = HILLSIDE[int(_h(idx * 5) * HILLSIDE.size()) % HILLSIDE.size()]
-				var jit := int((_h(idx * 9) - 0.5) * 3.0)
-				_rect(int(x) + jit, int(y), box - 1, box - 1, c)
-				_rect(int(x) + jit, int(y), box - 1, 1, c.lightened(0.16))            # lit roof edge
-				_rect(int(x) + jit, int(y) + box - 2, box - 1, 1, c.darkened(0.22))   # base shade
-				_rect(int(x) + jit + 1, int(y) + 2, 2, 2, Color8(70, 56, 50))         # tiny window
-			y += float(box)
-			row += 1
-		x += float(box) + 1.0
+		# a clustered patch: a run of adjacent house columns of varying box size
+		var cluster := 3 + int(_h(i * 71 + 9) * 22.0)            # 3..24 columns packed together
+		for j in range(cluster):
+			if x >= W - 6.0:
+				break
+			var blocked := false
+			for cz in clear:
+				if absf(x - cz.x) < cz.y:
+					blocked = true
+					break
+			var s := 6000 + i * 29 + j
+			var box := 7 + int(_h(s * 9) * 4)
+			if blocked:
+				x += float(box) + 1.0
+				continue
+			var ridge := _near_ridge(x)
+			var depth := 24.0 + _h(s * 7 + 1) * 70.0
+			var col_top := ridge + 14.0 + _h(s * 5 + 2) * 26.0
+			var col_bot := minf(col_top + depth, float(shore))
+			# sparse internal blanks so greenery peeks through even within a cluster
+			if _h(s * 11) > 0.12:
+				var y := col_top
+				var row := 0
+				while y < col_bot:
+					var idx := s * 131 + row * 23
+					if _h(idx * 3) > 0.16:
+						var c: Color = HILLSIDE[int(_h(idx * 5) * HILLSIDE.size()) % HILLSIDE.size()]
+						var jit := int((_h(idx * 9) - 0.5) * 3.0)
+						_rect(int(x) + jit, int(y), box - 1, box - 1, c)
+						_rect(int(x) + jit, int(y), box - 1, 1, c.lightened(0.16))           # lit roof
+						_rect(int(x) + jit, int(y) + box - 2, box - 1, 1, c.darkened(0.22))  # base shade
+						_rect(int(x) + jit + 1, int(y) + 2, 2, 2, Color8(70, 56, 50))        # window
+					y += float(box)
+					row += 1
+			x += float(box)   # columns within a patch sit edge-to-edge (tight)
+		# wide, non-linear open gap of bare slope between patches
+		var g := _h(i * 47 + 3)
+		x += 18.0 + g * g * 170.0
 		i += 1
 
 
@@ -425,33 +441,38 @@ func _water() -> void:
 
 # ================================================================ city towers
 func _city_towers() -> void:
-	# white/cream apartment towers clustered along the shore, between water and the beach band.
-	# Deterministic window grids; non-repeating heights/widths via the envelope.
+	# white/cream apartment towers along the shore, between water and the beach band.
+	# Spacing is intentionally irregular: towers come in tight clusters (2-4 jammed almost
+	# edge-to-edge, sometimes a lone one) separated by genuinely wide open gaps that reveal the
+	# bay/greenery behind. The gap uses a non-linear (squared) hash so big gaps are common and
+	# the rhythm never reads as even. Heights/widths/tints vary per tower via the hash.
 	var base_y := 528
 	var x := -30.0
 	var i := 0
 	while x < W + 30.0:
-		var s := 7000 + i
-		var e := _envelope(x * 1.4 + float(s) * 90.0)
-		var bw := int(22 + _h(s * 9 + 2) * 30)
-		var bh := int((52 + e * 96) * (0.7 + _h(s * 5 + 7) * 0.6))
-		var byt := base_y - bh
-		# tint each tower slightly between white and cream
-		var fill := TOWER.lerp(Color8(238, 230, 214), _h(s * 4))
-		_rect(int(x), byt, bw, base_y - byt, fill)
-		# shaded right third
-		_rect(int(x) + int(bw * 0.66), byt, int(bw * 0.34), base_y - byt, TOWER_SH)
-		# bright top edge
-		_rect(int(x), byt, bw, 2, Color(1, 1, 1, 0.7))
-		# deterministic window grid
-		_tower_windows(int(x), byt, bw, base_y - byt, s)
-		# occasional rooftop prop
-		var k := int(_h(s * 7) * 4)
-		if k == 0:
-			_rect(int(x) + bw / 2 - 1, byt - 12, 2, 12, TOWER_SH)   # antenna
-		elif k == 1:
-			_rect(int(x) + 4, byt - 6, 8, 6, TOWER_SH)              # rooftop box
-		x += float(bw) + 5.0 + _h(s * 3) * 14.0
+		# how many towers in this cluster: 1..4, biased toward small clusters and occasional singles
+		var cluster := 1 + int(_h(i * 211 + 5) * _h(i * 97 + 13) * 4.0)   # squared-ish -> mostly 1-2
+		for j in range(cluster):
+			var s := 7000 + i * 17 + j
+			var e := _envelope(x * 1.4 + float(s) * 90.0)
+			var bw := int(18 + _h(s * 9 + 2) * 40)                        # wider width spread
+			var bh := int((48 + e * 104) * (0.62 + _h(s * 5 + 7) * 0.74))
+			var byt := base_y - bh
+			var fill := TOWER.lerp(Color8(238, 230, 214), _h(s * 4))
+			_rect(int(x), byt, bw, base_y - byt, fill)
+			_rect(int(x) + int(bw * 0.66), byt, int(bw * 0.34), base_y - byt, TOWER_SH)  # shaded right
+			_rect(int(x), byt, bw, 2, Color(1, 1, 1, 0.7))                # bright top edge
+			_tower_windows(int(x), byt, bw, base_y - byt, s)
+			var k := int(_h(s * 7) * 4)
+			if k == 0:
+				_rect(int(x) + bw / 2 - 1, byt - 12, 2, 12, TOWER_SH)     # antenna
+			elif k == 1:
+				_rect(int(x) + 4, byt - 6, 8, 6, TOWER_SH)                # rooftop box
+			# tight within-cluster spacing: jammed against neighbour, occasionally touching
+			x += float(bw) + (0.0 if _h(s * 3) < 0.45 else 1.0 + _h(s * 31) * 5.0)
+		# wide, non-linear open gap between clusters (squared hash -> many large gaps)
+		var g := _h(i * 53 + 7)
+		x += 10.0 + g * g * 150.0
 		i += 1
 
 

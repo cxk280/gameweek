@@ -4,6 +4,7 @@ extends Node2D
 ## loop (lobby/countdown/race/results) off Net's server-authoritative phase events. When not
 ## connected to a server it falls back to free-run (single-player time trial).
 
+const Backdrop := preload("res://scripts/Backdrop.gd")
 const GhostScene := preload("res://scenes/Player.tscn")
 const LocalScene := preload("res://scenes/player/LocalPlayer.tscn")
 const SelectScene := preload("res://scenes/CharacterSelect.tscn")
@@ -22,6 +23,9 @@ var _race_hud: RaceHUD = null
 var _racebot := false        # headless test: auto-play + auto-ready in the race
 var _racebot_readied := false
 var _current_level := -1
+var _bg: ParallaxBackground = null
+var _sky_rect: TextureRect = null
+var _backdrop_theme := ""
 
 @onready var level: Level = $Level
 @onready var players: Node2D = $Players
@@ -40,7 +44,6 @@ func _ready() -> void:
 	level.checkpoint_reached.connect(_on_checkpoint)
 	level.finish_reached.connect(_on_finish)
 	_ensure_level(0)
-	_build_skyline()
 	banner.text = ""
 	if _racebot:
 		# Headless race participant: drive the race flow, auto-ready on lobby.
@@ -139,7 +142,9 @@ func _ensure_level(idx: int) -> void:
 	if idx == _current_level:
 		return
 	_current_level = idx
-	level.load_level(Levels.ALL[idx % Levels.ALL.size()])
+	var data: Dictionary = Levels.ALL[idx % Levels.ALL.size()]
+	level.load_level(data)
+	_build_backdrop(str(data.get("backdrop", "city")))
 	Net.local_pos = level.start_pos
 	if _local:
 		_reset_to_start()
@@ -242,84 +247,51 @@ func _format_time(t: float) -> String:
 	return "%d:%02d.%03d" % [total_ms / 60000, (total_ms / 1000) % 60, total_ms % 1000]
 
 
-func _build_skyline() -> void:
-	var pb := ParallaxBackground.new()
-	add_child(pb)
-	move_child(pb, 0)
-	_add_stars(pb)
-	_add_moon(pb)
-	_add_sky_layer(pb, 0.2, Color(0.05, 0.05, 0.13), 70, 7)
-	_add_sky_layer(pb, 0.45, Color(0.08, 0.06, 0.18), 130, 11)
-
-
-func _add_stars(pb: ParallaxBackground) -> void:
-	var layer := ParallaxLayer.new()
-	layer.motion_scale = Vector2(0.08, 0.08)
-	pb.add_child(layer)
-	for i in range(180):
-		var sx := float((i * 167) % int(bounds_w()))
-		var sy := float((i * 89) % 380)
-		var s := ColorRect.new()
-		var b := 0.5 + float(i % 5) * 0.1
-		s.size = Vector2(2, 2)
-		s.position = Vector2(sx, sy)
-		s.color = Color(b, b, b * 1.1, 0.9)
-		layer.add_child(s)
-
-
-func _add_moon(pb: ParallaxBackground) -> void:
-	var layer := ParallaxLayer.new()
-	layer.motion_scale = Vector2(0.04, 0.04)
-	pb.add_child(layer)
-	var glow := _disc(70.0, Color(0.7, 0.8, 1.0, 0.10))
-	glow.position = Vector2(960, 150)
-	layer.add_child(glow)
-	var moon := _disc(46.0, Color(0.86, 0.9, 0.98, 1.0))
-	moon.position = Vector2(960, 150)
-	layer.add_child(moon)
-	var crater := _disc(40.0, Color(0.80, 0.85, 0.95, 1.0))
-	crater.position = Vector2(972, 142)
-	layer.add_child(crater)
-
-
-func _disc(radius: float, color: Color) -> Polygon2D:
-	var poly := PackedVector2Array()
-	for a in range(20):
-		var ang := TAU * float(a) / 20.0
-		poly.append(Vector2(cos(ang), sin(ang)) * radius)
-	var p := Polygon2D.new()
-	p.polygon = poly
-	p.color = color
-	return p
+func _build_backdrop(theme: String) -> void:
+	# 2.5D parallax: a static sky gradient plus depth layers that scroll at increasing speeds,
+	# so distant bodies (moon/stars) barely move while nearer building rows track the camera.
+	if theme == _backdrop_theme and _bg != null:
+		return
+	_backdrop_theme = theme
+	if _bg != null:
+		_bg.queue_free()
+	var data := Backdrop.new().build(theme, bounds_w(), 1280, 720)
+	# static full-viewport sky (no parallax)
+	if _sky_rect == null:
+		var skybg := $Sky.get_node_or_null("SkyBG")
+		if skybg:
+			skybg.queue_free()
+		_sky_rect = TextureRect.new()
+		_sky_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_sky_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_sky_rect.stretch_mode = TextureRect.STRETCH_SCALE
+		_sky_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		$Sky.add_child(_sky_rect)
+	_sky_rect.texture = ImageTexture.create_from_image(data["sky"])
+	# parallax depth layers (back -> front), bottom-anchored to the level horizon
+	_bg = ParallaxBackground.new()
+	_bg.layer = -5
+	add_child(_bg)
+	var horizon := level.bounds.end.y
+	var left := level.bounds.position.x
+	for ld in data["layers"]:
+		var layer := ParallaxLayer.new()
+		var m: float = ld["motion"]
+		layer.motion_scale = Vector2(m, m)
+		var spr := Sprite2D.new()
+		spr.texture = ImageTexture.create_from_image(ld["image"])
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		spr.centered = false
+		var top: float = ld["top"]
+		if bool(ld.get("anchor_bottom", false)):
+			top = horizon - float((ld["image"] as Image).get_height())
+		spr.position = Vector2(left, top)
+		layer.add_child(spr)
+		_bg.add_child(layer)
 
 
 func bounds_w() -> float:
 	return maxf(level.bounds.size.x, 1.0)
-
-
-func _add_sky_layer(pb: ParallaxBackground, scale: float, color: Color, seedn: int, count: int) -> void:
-	var layer := ParallaxLayer.new()
-	layer.motion_scale = Vector2(scale, scale)
-	pb.add_child(layer)
-	var base_y := 820.0
-	var x := -200.0
-	for i in range(count * 6):
-		var w := 70.0 + float((i * seedn + 13) % 140)
-		var h := 140.0 + float((i * 53 + seedn * 7) % 360)
-		var b := ColorRect.new()
-		b.position = Vector2(x, base_y - h)
-		b.size = Vector2(w, h)
-		b.color = color
-		layer.add_child(b)
-		# a couple of lit neon windows
-		var win_color := Color(0.0, 0.95, 1.0, 0.5) if i % 2 == 0 else Color(1.0, 0.3, 0.7, 0.5)
-		for k in range(3):
-			var win := ColorRect.new()
-			win.size = Vector2(6, 6)
-			win.position = Vector2(x + 14 + (k * 18 % int(maxf(w - 20, 10))), base_y - h + 20 + k * 26)
-			win.color = win_color
-			layer.add_child(win)
-		x += w + 30.0
 
 
 func _input(event: InputEvent) -> void:

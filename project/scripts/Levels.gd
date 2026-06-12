@@ -7,6 +7,7 @@ class_name Levels
 
 const LEVEL_1 := {
 	"name": "Neon Rooftops",
+	"backdrop": "city",
 	"start": Vector2(120, 520),
 	"finish": Vector2(8760, 520),
 	"bounds": Rect2(-200, 0, 9600, 900),
@@ -49,6 +50,7 @@ const LEVEL_1 := {
 
 const LEVEL_2 := {
 	"name": "Spire Climb",
+	"backdrop": "city",
 	"start": Vector2(120, 600),
 	"finish": Vector2(6760, 360),
 	"bounds": Rect2(-200, 0, 7400, 960),
@@ -88,6 +90,7 @@ const LEVEL_2 := {
 
 const LEVEL_3 := {
 	"name": "Skyline Sprint",
+	"backdrop": "city",
 	"start": Vector2(120, 500),
 	"finish": Vector2(8700, 520),
 	"bounds": Rect2(-200, 0, 9400, 900),

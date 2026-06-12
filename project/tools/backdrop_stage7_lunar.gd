@@ -279,7 +279,10 @@ func _colony_band(base_y: float, smin: int, smax: int, gmin: int, gmax: int, haz
 		var cx := int(x) + sz
 		match kind:
 			0:
-				_dome(Vector2(cx, base_y), float(sz), haze, false)
+				# most domes are plain silver, but some reveal a lush green interior so the
+				# colony reads as having several biodome habitats (kept sparse for contrast)
+				var lush := _h(s * 41 + 9) < 0.42
+				_dome(Vector2(cx, base_y), float(sz), haze, lush)
 			1:
 				_habitat_ring(int(x), base_y, sz, haze, lit, s)
 			2:

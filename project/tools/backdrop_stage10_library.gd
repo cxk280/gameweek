@@ -63,6 +63,7 @@ func _compose() -> void:
 	_floor()                   # checkered marble floor + soft reflections
 	_hero_statue(int(W * 0.30), 566)   # landmark marble figure standing on the floor
 	_great_window(int(W * 0.62), 470)  # landmark towering arched window set into the wall
+	_statue_collection()       # a few more tasteful sculptures spread along the hall
 	_foreground()              # nearest gallery-ledge platforms + props
 
 
@@ -445,6 +446,84 @@ func _hero_statue(cx: int, ground_y: int) -> void:
 	# soft uplight from below
 	for k in range(5, 0, -1):
 		_disc(Vector2(cx, fy - 30), 30.0 + k * 8.0, Color(1.0, 0.86, 0.52, 0.03))
+
+
+# ---------------------------------------------------------------- sculpture collection
+func _statue_collection() -> void:
+	# A small, distinguished set of marble figures on pedestals, spread at non-repeating spots
+	# along the full length (positions scale with width so they stay evenly distributed and never
+	# crowd the hero statue or each other). Varied poses keep it a curated collection, not a mob.
+	# Each entry: fractional x, pose id, slight scale variation.
+	var picks := [
+		[0.085, 1, 0.92],   # robed figure (calm, hands lowered)
+		[0.485, 2, 0.98],   # scholar holding a book
+		[0.90, 3, 0.9],     # a bust
+	]
+	for p in picks:
+		var fx: float = p[0]
+		var pose: int = int(p[1])
+		var sc: float = p[2]
+		_statue(int(W * fx), 566, pose, sc)
+
+
+func _statue(cx: int, ground_y: int, pose: int, sc: float) -> void:
+	# one marble figure on a pedestal; `pose` selects silhouette/prop, `sc` scales it.
+	var ped_w := int(48 * sc)
+	var ped_h := int(96 * sc)
+	var ped_top := ground_y - ped_h
+	# pedestal
+	_rect(cx - ped_w / 2, ped_top, ped_w, ped_h, MARBLE)
+	_rect(cx - ped_w / 2, ped_top, 3, ped_h, MARBLE_SH)
+	_rect(cx + ped_w / 2 - 3, ped_top, 3, ped_h, MARBLE.lightened(0.1))
+	# cap + base moldings with gilded accents
+	_rect(cx - ped_w / 2 - 5, ped_top, ped_w + 10, 7, MARBLE_SH)
+	_rect(cx - ped_w / 2 - 5, ped_top + 5, ped_w + 10, 2, GOLD)
+	_rect(cx - ped_w / 2 - 6, ground_y - 10, ped_w + 12, 10, MARBLE_SH)
+	_rect(cx - ped_w / 2 - 6, ground_y - 10, ped_w + 12, 2, GOLD)
+	# small inscription plaque
+	_rect(cx - int(13 * sc), ped_top + int(34 * sc), int(26 * sc), int(16 * sc), MARBLE_SH)
+	_rect(cx - int(11 * sc), ped_top + int(39 * sc), int(22 * sc), 2, Color(GOLD.r, GOLD.g, GOLD.b, 0.55))
+	var fy := ped_top
+	if pose == 3:
+		# a bust on top (chest + head only) — a more compact sculpture
+		_trap(cx, fy - int(26 * sc), int(12 * sc), int(34 * sc), int(26 * sc), MARBLE)
+		_rect(cx - int(17 * sc), fy - int(8 * sc), int(34 * sc), int(8 * sc), MARBLE)
+		_disc(Vector2(cx, fy - int(36 * sc)), 10.0 * sc, MARBLE)
+		_disc(Vector2(cx - 3, fy - int(37 * sc)), 8.0 * sc, MARBLE_SH)
+	else:
+		# full robed figure
+		_trap(cx, fy - int(58 * sc), int(18 * sc), int(38 * sc), int(58 * sc), MARBLE)
+		_rect(cx - int(19 * sc), fy - int(14 * sc), int(38 * sc), int(14 * sc), MARBLE)
+		_trap(cx, fy - int(58 * sc), int(6 * sc), int(14 * sc), int(58 * sc), MARBLE_SH)  # drape fold
+		# torso
+		_rect(cx - int(13 * sc), fy - int(92 * sc), int(26 * sc), int(36 * sc), MARBLE)
+		_rect(cx - int(13 * sc), fy - int(92 * sc), int(4 * sc), int(36 * sc), MARBLE_SH)
+		# head
+		_disc(Vector2(cx, fy - int(102 * sc)), 9.0 * sc, MARBLE)
+		_disc(Vector2(cx - 2, fy - int(103 * sc)), 7.0 * sc, MARBLE_SH)
+		match pose:
+			0:
+				# torch-bearer, raised arm (mirrored to the left for variety)
+				_line(Vector2(cx - int(11 * sc), fy - int(86 * sc)), Vector2(cx - int(28 * sc), fy - int(116 * sc)), MARBLE, int(5 * sc))
+				_disc(Vector2(cx - int(30 * sc), fy - int(120 * sc)), 5.0 * sc, GOLD)
+				_disc(Vector2(cx - int(30 * sc), fy - int(124 * sc)), 3.0 * sc, GOLD_BRIGHT)
+				for k in range(5, 0, -1):
+					_disc(Vector2(cx - int(30 * sc), fy - int(122 * sc)), 5.0 * sc + k * 2.0, Color(1.0, 0.84, 0.5, 0.05))
+				_line(Vector2(cx + int(11 * sc), fy - int(86 * sc)), Vector2(cx + int(17 * sc), fy - int(64 * sc)), MARBLE, int(5 * sc))
+			2:
+				# scholar holding a book against the chest
+				_line(Vector2(cx - int(11 * sc), fy - int(84 * sc)), Vector2(cx - int(4 * sc), fy - int(66 * sc)), MARBLE, int(5 * sc))
+				_line(Vector2(cx + int(11 * sc), fy - int(84 * sc)), Vector2(cx + int(4 * sc), fy - int(66 * sc)), MARBLE, int(5 * sc))
+				_rect(cx - int(9 * sc), fy - int(70 * sc), int(18 * sc), int(13 * sc), CREAM)
+				_rect(cx - 1, fy - int(70 * sc), 2, int(13 * sc), MARBLE_SH)  # spine
+				_rect(cx - int(7 * sc), fy - int(66 * sc), int(14 * sc), 1, Color(GOLD.r, GOLD.g, GOLD.b, 0.6))
+			_:
+				# calm robed figure, hands lowered
+				_line(Vector2(cx - int(11 * sc), fy - int(86 * sc)), Vector2(cx - int(16 * sc), fy - int(58 * sc)), MARBLE, int(5 * sc))
+				_line(Vector2(cx + int(11 * sc), fy - int(86 * sc)), Vector2(cx + int(16 * sc), fy - int(58 * sc)), MARBLE, int(5 * sc))
+	# soft warm uplight from below
+	for k in range(5, 0, -1):
+		_disc(Vector2(cx, fy - int(24 * sc)), 24.0 * sc + k * 6.0, Color(1.0, 0.86, 0.52, 0.025))
 
 
 # ---------------------------------------------------------------- landmark: great window
