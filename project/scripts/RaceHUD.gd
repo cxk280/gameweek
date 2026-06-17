@@ -4,18 +4,23 @@ class_name RaceHUD
 ## results screen. Driven by Main from Net's race_event; emits ready_pressed back out.
 
 signal ready_pressed(is_ready: bool)
+signal practice_requested
 
 const CYAN := Color(0.2, 0.95, 1.0)
 const GOLD := Color(1.0, 0.85, 0.2)
 const DIM := Color(0.7, 0.72, 0.85)
+const GREEN := Color(0.45, 1.0, 0.55)
 
 var _is_ready := false
 
 var _lobby: Control
 var _lobby_course: Label
+var _lobby_presence: Label
+var _lobby_waiting: Label
 var _lobby_list: VBoxContainer
 var _lobby_board: VBoxContainer
 var _ready_btn: Button
+var _invite_btn: Button
 var _countdown: Label
 var _standings: VBoxContainer
 var _results: Control
@@ -46,25 +51,39 @@ func hide_all() -> void:
 func show_lobby(payload: Dictionary, my_id: int) -> void:
 	hide_all()
 	_lobby.visible = true
-	_lobby_course.text = "▣ COURSE:  %s" % payload.get("level_name", "—")
+	_lobby_course.text = "NEXT COURSE:  %s" % payload.get("level_name", "—")
 	var wins: Dictionary = payload.get("wins", {})
 	for c in _lobby_list.get_children():
 		c.queue_free()
 	var names: Dictionary = payload.get("names", {})
 	var readies: Dictionary = payload.get("readies", {})
+	var n_players := names.size()
+	var n_ready := 0
 	for id in names:
+		if readies.get(id, false):
+			n_ready += 1
+		var is_r: bool = readies.get(id, false)
 		var row := Label.new()
-		var mark := "●" if readies.get(id, false) else "○"
 		var you := "  (you)" if int(id) == my_id else ""
 		var nm := str(names[id])
 		var wn := int(wins.get(nm, 0))
-		var badge := "   ★%d" % wn if wn > 0 else ""
-		row.text = "%s  %s%s%s" % [mark, nm, you, badge]
-		row.add_theme_color_override("font_color", CYAN if readies.get(id, false) else DIM)
+		var badge := "   (%d wins)" % wn if wn > 0 else ""
+		row.text = "   %s%s%s%s" % [nm, you, badge, "      READY" if is_r else "      not ready"]
+		row.add_theme_font_size_override("font_size", 20)
+		row.add_theme_color_override("font_color", GREEN if is_r else DIM)
 		_lobby_list.add_child(row)
+	# Presence line — the player should always know how many real humans are here.
+	if n_players <= 1:
+		_lobby_presence.text = "You're the only one here — invite a friend, or ready up for a solo time trial."
+		_lobby_presence.add_theme_color_override("font_color", GOLD)
+	else:
+		_lobby_presence.text = "%d racers in the lobby   ·   %d/%d ready" % [n_players, n_ready, n_players]
+		_lobby_presence.add_theme_color_override("font_color", GREEN)
+	# Mid-race joiners wait here for the next race rather than being dropped into a running one.
+	_lobby_waiting.visible = bool(payload.get("race_in_progress", false))
 	_is_ready = bool(readies.get(my_id, false))
-	_ready_btn.text = "CANCEL" if _is_ready else "READY UP"
-	_ready_btn.add_theme_color_override("font_color", GOLD if _is_ready else Color.WHITE)
+	_ready_btn.text = "READY — waiting for others" if _is_ready else "READY UP"
+	_ready_btn.add_theme_color_override("font_color", GREEN if _is_ready else GOLD)
 	for c in _lobby_board.get_children():
 		c.queue_free()
 	_fill_board(_lobby_board, payload.get("board", []))
@@ -173,29 +192,76 @@ func _build_lobby() -> void:
 	add_child(_lobby)
 	var box := VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 14)
+	box.add_theme_constant_override("separation", 12)
 	_center(_lobby, box)
-	_title(box, "LOBBY")
+	_title(box, "ONLINE LOBBY")
+
+	_lobby_presence = Label.new()
+	_lobby_presence.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_lobby_presence.add_theme_font_size_override("font_size", 18)
+	box.add_child(_lobby_presence)
+
 	_lobby_course = Label.new()
 	_lobby_course.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lobby_course.add_theme_font_size_override("font_size", 20)
+	_lobby_course.add_theme_font_size_override("font_size", 18)
 	_lobby_course.add_theme_color_override("font_color", GOLD)
 	box.add_child(_lobby_course)
+
 	_lobby_list = VBoxContainer.new()
 	_lobby_list.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_child(_lobby_list)
+
+	_lobby_waiting = Label.new()
+	_lobby_waiting.text = "A race is underway — ready up and you'll start the next one."
+	_lobby_waiting.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_lobby_waiting.add_theme_color_override("font_color", GOLD)
+	_lobby_waiting.visible = false
+	box.add_child(_lobby_waiting)
+
 	_ready_btn = Button.new()
 	_ready_btn.text = "READY UP"
-	_ready_btn.custom_minimum_size = Vector2(220, 48)
+	_ready_btn.custom_minimum_size = Vector2(300, 56)
+	_ready_btn.add_theme_font_size_override("font_size", 24)
+	_ready_btn.add_theme_color_override("font_color", GOLD)
 	_ready_btn.pressed.connect(_on_ready)
 	box.add_child(_ready_btn)
+
 	var hint := Label.new()
-	hint.text = "The race starts when everyone is ready.\nShare this page's URL to race a friend — or ready up solo for a time trial."
+	hint.text = "The race begins the moment everyone is READY."
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	hint.add_theme_color_override("font_color", DIM)
 	box.add_child(hint)
+
+	_invite_btn = Button.new()
+	_invite_btn.text = "Invite a friend  —  copy race link"
+	_invite_btn.custom_minimum_size = Vector2(300, 40)
+	_invite_btn.add_theme_color_override("font_color", CYAN)
+	_invite_btn.pressed.connect(_on_invite)
+	box.add_child(_invite_btn)
+
+	var practice := Button.new()
+	practice.text = "Practice solo instead"
+	practice.flat = true
+	practice.add_theme_color_override("font_color", DIM)
+	practice.pressed.connect(func() -> void: practice_requested.emit())
+	box.add_child(practice)
+
 	_lobby_board = VBoxContainer.new()
 	box.add_child(_lobby_board)
+
+
+func _on_invite() -> void:
+	# Copy the page URL so opening it in another window / sending it to a friend joins the
+	# same server. The whole "how do I play with someone" question answered in one click.
+	var ok := false
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("navigator.clipboard && navigator.clipboard.writeText(window.location.href)", true)
+		ok = true
+	else:
+		DisplayServer.clipboard_set("https://rooftop-web-production.up.railway.app/")
+		ok = true
+	_invite_btn.text = "Link copied! Open it in another browser window" if ok else "Copy failed — copy the page URL"
+	_invite_btn.add_theme_color_override("font_color", GREEN if ok else GOLD)
 
 
 func _build_countdown() -> void:
@@ -225,7 +291,7 @@ func _build_results() -> void:
 	_results_list = VBoxContainer.new()
 	box.add_child(_results_list)
 	var foot := Label.new()
-	foot.text = "Next race starting soon…"
+	foot.text = "Next race starting soon..."
 	foot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	foot.add_theme_color_override("font_color", DIM)
 	box.add_child(foot)

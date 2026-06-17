@@ -42,6 +42,21 @@ var is_connected := false
 var my_id := 0
 var rtt_ms := 0
 
+# Client link state for the UI + reliable reconnect. "connecting" while (re)dialing,
+# "online" once connected, "offline" after we give up (falls back to solo). Emitted only
+# on a real transition so callers can `await` it to learn the outcome.
+signal link_state_changed(state: String)
+var link_state := "connecting"
+var peer_count := 0           # live count of registered players (from the latest snapshot)
+const MAX_RETRIES := 5
+const RETRY_DELAY := 1.5
+var _retries := 0
+
+
+## True once we're connected AND another player is present (for "race a friend" affordances).
+func others_online() -> int:
+	return maxi(0, peer_count - 1) if is_connected else 0
+
 # Server-authoritative store (server only): peer_id -> state dict.
 var states := {}
 
@@ -149,18 +164,41 @@ func _web_query_param(key: String) -> String:
 
 
 func _start_client() -> void:
+	# Signals live on the MultiplayerAPI (not the peer), so connect them once even though we
+	# may rebuild the peer on every reconnect attempt.
+	if not multiplayer.connected_to_server.is_connected(_on_connected):
+		multiplayer.connected_to_server.connect(_on_connected)
+		multiplayer.connection_failed.connect(_on_connection_failed)
+		multiplayer.server_disconnected.connect(_on_server_disconnected)
 	var url := _resolve_server_url()
 	var peer := WebSocketMultiplayerPeer.new()
 	var err := peer.create_client(url)
 	if err != OK:
 		printerr("[client] create_client failed: %d" % err)
-		get_tree().quit(1)
+		_schedule_retry()
 		return
 	multiplayer.multiplayer_peer = peer
-	multiplayer.connected_to_server.connect(_on_connected)
-	multiplayer.connection_failed.connect(_on_connection_failed)
-	multiplayer.server_disconnected.connect(_on_server_disconnected)
-	print("[client] connecting to %s ..." % url)
+	print("[client] connecting to %s ... (attempt %d)" % [url, _retries + 1])
+
+
+func _schedule_retry() -> void:
+	# Reconnect with a short delay instead of silently falling to solo, so a flaky/cold-start
+	# WebSocket dial doesn't strand the player offline. After MAX_RETRIES we give up to "offline".
+	multiplayer.multiplayer_peer = null
+	if _retries >= MAX_RETRIES:
+		_set_link("offline")
+		push_warning("[client] could not reach server — playing solo")
+		return
+	_retries += 1
+	_set_link("connecting")
+	get_tree().create_timer(RETRY_DELAY).timeout.connect(_start_client, CONNECT_ONE_SHOT)
+
+
+func _set_link(state: String) -> void:
+	if link_state == state:
+		return
+	link_state = state
+	link_state_changed.emit(state)
 
 
 func _process(delta: float) -> void:
@@ -205,20 +243,24 @@ func _on_peer_disconnected(id: int) -> void:
 
 func _on_connected() -> void:
 	is_connected = true
+	_retries = 0
+	_set_link("online")
 	my_id = multiplayer.get_unique_id()
 	print("[client] connected id=%d" % my_id)
 	register.rpc_id(1, local_name, local_color, local_char)
 
 
 func _on_connection_failed() -> void:
-	# Non-fatal: keep playing single-player; remote ghosts just won't appear.
-	push_warning("[client] connection failed — continuing offline")
 	is_connected = false
+	push_warning("[client] connection failed — retrying")
+	_schedule_retry()
 
 
 func _on_server_disconnected() -> void:
-	printerr("[client] server disconnected")
+	printerr("[client] server disconnected — reconnecting")
 	is_connected = false
+	_retries = 0
+	_schedule_retry()
 
 
 # --- RPCs (defined on both ends; routed by the /root/Net path) ---
@@ -231,8 +273,11 @@ func register(pname: String, color: Color, char_id: String) -> void:
 	_chars[id] = char_id
 	if not readies.has(id):
 		readies[id] = false
-	# Tell the newcomer the current phase, then refresh everyone's lobby view.
-	srv_phase.rpc_id(id, phase, _lobby_payload() if phase == "lobby" else {})
+	# Newcomers always land in the lobby — never dumped mid-race into a confusing running
+	# course. If a race is underway they wait there for the next one.
+	var payload := _lobby_payload()
+	payload["race_in_progress"] = phase != "lobby"
+	srv_phase.rpc_id(id, "lobby", payload)
 	if phase == "lobby":
 		_broadcast_lobby()
 
@@ -248,6 +293,7 @@ func submit_state(pos: Vector2) -> void:
 
 @rpc("authority", "unreliable_ordered")
 func receive_snapshot(snap: Dictionary) -> void:
+	peer_count = snap.size()
 	players_updated.emit(snap)
 
 

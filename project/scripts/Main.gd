@@ -6,6 +6,7 @@ extends Node2D
 
 const Backdrop := preload("res://scripts/Backdrop.gd")
 const StageSelectLib := preload("res://scripts/StageSelect.gd")
+const OpponentArrowsLib := preload("res://scripts/OpponentArrows.gd")
 const GhostScene := preload("res://scenes/Player.tscn")
 const LocalScene := preload("res://scenes/player/LocalPlayer.tscn")
 const SelectScene := preload("res://scenes/CharacterSelect.tscn")
@@ -35,6 +36,7 @@ var _tower_spin: Sprite2D = null
 var _music: AudioStreamPlayer = null
 var _music_theme := ""
 var _stage_menu: Node = null
+var _opp_arrows: OpponentArrows = null
 var _shot_path := ""    # test hook: --shot=path captures the viewport then quits
 var _shot_t := 0.0
 var _shot_delay := 8.0
@@ -62,6 +64,8 @@ func _ready() -> void:
 	level.finish_reached.connect(_on_finish)
 	_ensure_level(0)
 	banner.text = ""
+	_opp_arrows = OpponentArrowsLib.new()
+	$HUD.add_child(_opp_arrows)
 	if _racebot:
 		# Headless race participant: drive the race flow, auto-ready on lobby.
 		Net.local_char = CharacterArt.ids()[0]
@@ -83,6 +87,10 @@ func _ready() -> void:
 
 func _on_character_chosen(char_id: String) -> void:
 	Net.local_char = char_id
+	# Don't commit to solo free-run before the link resolves: if we're still dialing the
+	# server, wait for it to land (or give up) so a fast pick reliably joins multiplayer.
+	while Net.link_state == "connecting":
+		await Net.link_state_changed
 	_race_mode = Net.is_connected
 	if _race_mode:
 		# Re-register with the chosen character; the server replies with the current phase.
@@ -90,17 +98,38 @@ func _on_character_chosen(char_id: String) -> void:
 		_race_hud = RaceHUD.new()
 		add_child(_race_hud)
 		_race_hud.ready_pressed.connect(func(r: bool): Net.send_ready(r))
+		_race_hud.practice_requested.connect(_enter_free_run)
 		Net.race_event.connect(_on_race_event)
 	_spawn_local()
 	if not _race_mode:
-		banner.text = ""
+		_enter_free_run()   # offline → solo free-run
+
+
+## Switch the local session into solo free-run (the offline default, or chosen from the lobby).
+## Stays connected to the server if it was — just stops participating in the race loop.
+func _enter_free_run() -> void:
+	_race_mode = false
+	if Net.race_event.is_connected(_on_race_event):
+		Net.race_event.disconnect(_on_race_event)
+	if _race_hud != null:
+		_race_hud.queue_free()
+		_race_hud = null
+	if _local:
+		_local.finished = false
+		_local.input_enabled = true
+	_finished = false
+	_timing = false
+	_race_time = 0.0
+	banner.text = ""
+	if $HUD.get_node_or_null("FreeRunHint") == null:
 		var h := Label.new()
+		h.name = "FreeRunHint"
 		h.text = "Tab: stages   ·   R: restart"
 		h.add_theme_font_size_override("font_size", 16)
 		h.modulate = Color(1, 1, 1, 0.5)
 		h.position = Vector2(16, 692)
 		$HUD.add_child(h)
-		_open_stage_select(false)   # free-run: pick a starting stage
+	_open_stage_select(false)   # pick a starting stage
 
 
 func _open_stage_select(can_cancel: bool) -> void:
@@ -253,7 +282,24 @@ func _physics_process(delta: float) -> void:
 				print("[auto] pos=%v on_floor=%s t=%.1f" % [
 					_local.global_position.round(), _local.is_on_floor(), _race_time])
 	timer_label.text = _format_time(_race_time)
-	info.text = "%s · players=%d · ping=%dms" % [Net.local_name, 1 + _ghosts.size(), Net.rtt_ms]
+	_update_status()
+	if _opp_arrows != null:
+		_opp_arrows.update_for(_local, _ghosts, get_viewport())
+
+
+func _update_status() -> void:
+	# Connection-aware HUD chip so multiplayer state is never ambiguous (and a flaky link is
+	# visible as "connecting…" rather than looking like a silent single-player game).
+	match Net.link_state:
+		"online":
+			info.text = "%s · %d online · %dms" % [Net.local_name, 1 + _ghosts.size(), Net.rtt_ms]
+			info.modulate = Color(0.45, 1.0, 0.55)
+		"connecting":
+			info.text = "%s · connecting..." % Net.local_name
+			info.modulate = Color(1.0, 0.85, 0.35)
+		_:
+			info.text = "%s · offline (solo)" % Net.local_name
+			info.modulate = Color(0.72, 0.74, 0.82)
 
 
 func _on_players_updated(states: Dictionary) -> void:
@@ -267,6 +313,8 @@ func _on_players_updated(states: Dictionary) -> void:
 			g.setup(str(s["name"]), s["color"], str(s.get("char", "vex")))
 			g.position = s["pos"]
 			g.target = s["pos"]
+			g.set_meta("nm", str(s["name"]))
+			g.set_meta("col", s["color"])
 			_ghosts[id] = g
 		else:
 			_ghosts[id].target = s["pos"]
