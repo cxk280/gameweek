@@ -40,7 +40,7 @@ text = "0:00.000"
 [node name="Banner" type="Label" parent="HUD"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -40.0
-theme_override_font_sizes/font_size = 52
+offset_top = -170.0
+theme_override_font_sizes/font_size = 40
 horizontal_alignment = 1
 vertical_alignment = 1

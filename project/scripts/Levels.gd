@@ -1,12 +1,19 @@
 extends Node
 class_name Levels
 ## Data-driven level definitions. Level.gd builds geometry, props, hazards, checkpoints and
-## finish from this. Adding a course = adding a dictionary. Platforms are Rect2(x, y, w, h)
-## with y = top surface; coordinates grow right/down. Keep gaps <= ~210px and up-steps
-## <= ~120px so the jump (≈120px height, ≈270px air distance) clears them.
+## finish from these dicts; each carries a "backdrop" theme key that Main feeds to the layered
+## 2.5D backdrop system. Platforms are Rect2(x, y, w, h) with y = top surface; coordinates grow
+## right/down. Keep gaps <= ~200px and up-steps <= ~100px so the jump (≈120px height, ≈270px air
+## distance) clears them — the generator below enforces this so every course is completable.
+##
+## Stage 1 is the hand-tuned reference course. Stages 2-10 are generated with per-theme profiles
+## (varied base height, height variation, gap/width ranges, and net rise) so each plays and looks
+## distinct. All courses run left->right (the spire course also climbs) so the autopilot/racebot
+## and multiplayer racing work on every stage.
 
 const LEVEL_1 := {
 	"name": "Neon Rooftops",
+	"backdrop": "city",
 	"start": Vector2(120, 520),
 	"finish": Vector2(8760, 520),
 	"bounds": Rect2(-200, 0, 9600, 900),
@@ -47,85 +54,74 @@ const LEVEL_1 := {
 	],
 }
 
-const LEVEL_2 := {
-	"name": "Spire Climb",
-	"start": Vector2(120, 600),
-	"finish": Vector2(6760, 360),
-	"bounds": Rect2(-200, 0, 7400, 960),
-	"platforms": [
-		Rect2(0, 660, 480, 300),
-		Rect2(640, 620, 200, 340),
-		Rect2(980, 560, 160, 400),
-		Rect2(1300, 600, 180, 360),
-		Rect2(1640, 540, 160, 420),
-		Rect2(1960, 600, 160, 360),
-		Rect2(2280, 540, 160, 420),
-		Rect2(2600, 480, 180, 480),
-		Rect2(2960, 560, 420, 400),
-		Rect2(3560, 500, 160, 460),
-		Rect2(3880, 440, 160, 520),
-		Rect2(4200, 500, 160, 460),
-		Rect2(4520, 440, 160, 520),
-		Rect2(4840, 400, 180, 560),
-		Rect2(5200, 460, 160, 500),
-		Rect2(5520, 400, 160, 560),
-		Rect2(5840, 360, 180, 600),
-		Rect2(6200, 420, 160, 540),
-		Rect2(6520, 420, 560, 540),
-	],
-	"hazards": [
-		Rect2(840, 920, 140, 24),
-		Rect2(3380, 920, 180, 24),
-	],
-	"checkpoints": [
-		Vector2(1720, 540),
-		Vector2(2690, 480),
-		Vector2(3960, 440),
-		Vector2(4930, 400),
-		Vector2(5930, 360),
-	],
-}
 
-const LEVEL_3 := {
-	"name": "Skyline Sprint",
-	"start": Vector2(120, 500),
-	"finish": Vector2(8700, 520),
-	"bounds": Rect2(-200, 0, 9400, 900),
-	"platforms": [
-		Rect2(0, 560, 520, 320),
-		Rect2(670, 540, 300, 320),
-		Rect2(1130, 560, 260, 320),
-		Rect2(1540, 520, 240, 320),
-		Rect2(1940, 560, 200, 320),
-		Rect2(2290, 510, 200, 320),
-		Rect2(2650, 560, 300, 320),
-		Rect2(3100, 520, 200, 320),
-		Rect2(3460, 470, 200, 320),
-		Rect2(3810, 520, 240, 320),
-		Rect2(4210, 560, 400, 320),
-		Rect2(4760, 500, 200, 320),
-		Rect2(5120, 540, 200, 320),
-		Rect2(5470, 490, 220, 320),
-		Rect2(5850, 540, 200, 320),
-		Rect2(6200, 500, 240, 320),
-		Rect2(6600, 560, 300, 320),
-		Rect2(7050, 520, 200, 320),
-		Rect2(7410, 560, 240, 320),
-		Rect2(7800, 520, 200, 320),
-		Rect2(8160, 560, 820, 320),
-	],
-	"hazards": [
-		Rect2(2140, 800, 150, 24),
-		Rect2(4960, 800, 160, 24),
-		Rect2(6900, 800, 150, 24),
-	],
-	"checkpoints": [
-		Vector2(1660, 520),
-		Vector2(3200, 520),
-		Vector2(4860, 500),
-		Vector2(6320, 500),
-		Vector2(7530, 560),
-	],
-}
+# ----------------------------------------------------------------- generated courses
+static func _hh(n: int) -> float:
+	var x := (n * 1103515245 + 12345) & 0x7fffffff
+	x = (x ^ (x >> 13)) * 1274126177 & 0x7fffffff
+	return float(x % 10000) / 10000.0
 
-const ALL := [LEVEL_1, LEVEL_2, LEVEL_3]
+
+## Build a playable left->right course. `rise` lifts the whole course over its length (a climb).
+## Constraints (gap<=gap_max<=200, up-step<=100) guarantee the jump clears every transition.
+static func _course(name: String, backdrop: String, seed: int, length: float, base_y: float, amp: float, gap_min: float, gap_max: float, w_min: float, w_max: float, rise: float, haz_n: int) -> Dictionary:
+	var H := 340.0
+	var platforms: Array = []
+	var hazards: Array = []
+	var checkpoints: Array = []
+	var start_w := 540.0
+	platforms.append(Rect2(0.0, base_y, start_w, H))
+	var prev_top := base_y
+	var x := start_w
+	var i := 0
+	while x < length - 1100.0:
+		var t := x / length
+		var local_base := base_y - rise * t
+		var gap := gap_min + _hh(seed * 101 + i * 7) * (gap_max - gap_min)
+		x += gap
+		var w := w_min + _hh(seed * 131 + i * 5) * (w_max - w_min)
+		var target := local_base - amp * 0.5 + amp * _hh(seed * 167 + i * 3)
+		if prev_top - target > 100.0:
+			target = prev_top - 100.0          # cap up-step to a clearable height
+		if target - prev_top > 300.0:
+			target = prev_top + 300.0          # cap drop so the next ledge stays in reach
+		target = clampf(target, 360.0, 700.0)
+		platforms.append(Rect2(x, target, w, H))
+		if hazards.size() < haz_n and _hh(seed * 199 + i) > 0.74 and gap > 110.0:
+			hazards.append(Rect2(x - gap * 0.5 - 60.0, 800.0, 120.0, 24.0))
+		prev_top = target
+		x += w
+		i += 1
+	x += gap_min
+	var finish_top := clampf(base_y - rise, 360.0, 700.0)
+	platforms.append(Rect2(x, finish_top, 860.0, H))
+	var total := x + 860.0
+	var n := platforms.size()
+	for k in range(1, 6):
+		var r: Rect2 = platforms[int(float(n) * float(k) / 6.0)]
+		checkpoints.append(Vector2(r.position.x + r.size.x * 0.5, r.position.y))
+	return {
+		"name": name,
+		"backdrop": backdrop,
+		"start": Vector2(120, base_y - 40.0),
+		"finish": Vector2(x + 120.0, finish_top),
+		"bounds": Rect2(-200, 0, total + 1000.0, 900),
+		"platforms": platforms,
+		"hazards": hazards,
+		"checkpoints": checkpoints,
+	}
+
+
+# Stage order 1-10, each a distinct theme + play profile. Names are original/fantasy.
+static var ALL: Array = [
+	LEVEL_1,                                                                                            # 1 neon city
+	_course("Lantern Quarter",   "town",       2, 8200.0, 560.0, 130.0,  90.0, 180.0, 200.0, 440.0,   0.0, 3),  # 2
+	_course("Stilt Harbor",      "lake",       3, 8600.0, 540.0, 110.0, 120.0, 200.0, 180.0, 420.0,   0.0, 4),  # 3
+	_course("Terracotta Heights","terracotta", 4, 8800.0, 520.0, 170.0,  90.0, 180.0, 200.0, 460.0,   0.0, 3),  # 4
+	_course("Foundry Flats",     "brick",      5, 8000.0, 560.0,  90.0, 100.0, 190.0, 220.0, 480.0,   0.0, 4),  # 5
+	_course("The Grand Athenaeum","library",  10, 8200.0, 540.0, 120.0,  90.0, 175.0, 200.0, 440.0,   0.0, 3),  # 6 interior
+	_course("Selene Outpost",    "lunar",      7, 8600.0, 540.0, 150.0, 120.0, 200.0, 180.0, 420.0,   0.0, 3),  # 7
+	_course("Highland Bastion",  "highland",   8, 8800.0, 520.0, 160.0,  90.0, 180.0, 200.0, 460.0,   0.0, 3),  # 8
+	_course("Cabana Bay",        "bay",        9, 8400.0, 560.0, 100.0, 110.0, 195.0, 200.0, 460.0,   0.0, 4),  # 9
+	_course("The Obsidian Spire","tower",      6, 8400.0, 640.0, 120.0, 100.0, 180.0, 200.0, 420.0, 250.0, 3),  # 10 climbs (finale)
+]

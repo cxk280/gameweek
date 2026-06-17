@@ -4,6 +4,8 @@ extends Node2D
 ## loop (lobby/countdown/race/results) off Net's server-authoritative phase events. When not
 ## connected to a server it falls back to free-run (single-player time trial).
 
+const Backdrop := preload("res://scripts/Backdrop.gd")
+const StageSelectLib := preload("res://scripts/StageSelect.gd")
 const GhostScene := preload("res://scenes/Player.tscn")
 const LocalScene := preload("res://scenes/player/LocalPlayer.tscn")
 const SelectScene := preload("res://scenes/CharacterSelect.tscn")
@@ -22,6 +24,20 @@ var _race_hud: RaceHUD = null
 var _racebot := false        # headless test: auto-play + auto-ready in the race
 var _racebot_readied := false
 var _current_level := -1
+var _bg: ParallaxBackground = null
+var _sky_rect: TextureRect = null
+var _backdrop_theme := ""
+var _bg_thread: Thread = null
+var _bg_want_theme := ""
+var _bg_busy := false
+var _tower_layer: CanvasLayer = null
+var _tower_spin: Sprite2D = null
+var _music: AudioStreamPlayer = null
+var _music_theme := ""
+var _stage_menu: Node = null
+var _shot_path := ""    # test hook: --shot=path captures the viewport then quits
+var _shot_t := 0.0
+var _shot_delay := 8.0
 
 @onready var level: Level = $Level
 @onready var players: Node2D = $Players
@@ -34,13 +50,17 @@ func _ready() -> void:
 	var args := OS.get_cmdline_user_args()
 	_racebot = args.has("--racebot")
 	_auto = args.has("--auto") or _racebot
+	for a in args:
+		if a.begins_with("--shot="):
+			_shot_path = a.split("=")[1]
+		elif a.begins_with("--shotdelay="):
+			_shot_delay = float(a.split("=")[1])
 	Net.players_updated.connect(_on_players_updated)
 	if Net.is_server:
 		return
 	level.checkpoint_reached.connect(_on_checkpoint)
 	level.finish_reached.connect(_on_finish)
 	_ensure_level(0)
-	_build_skyline()
 	banner.text = ""
 	if _racebot:
 		# Headless race participant: drive the race flow, auto-ready on lobby.
@@ -74,6 +94,38 @@ func _on_character_chosen(char_id: String) -> void:
 	_spawn_local()
 	if not _race_mode:
 		banner.text = ""
+		var h := Label.new()
+		h.text = "Tab: stages   ·   R: restart"
+		h.add_theme_font_size_override("font_size", 16)
+		h.modulate = Color(1, 1, 1, 0.5)
+		h.position = Vector2(16, 692)
+		$HUD.add_child(h)
+		_open_stage_select(false)   # free-run: pick a starting stage
+
+
+func _open_stage_select(can_cancel: bool) -> void:
+	if _stage_menu != null and is_instance_valid(_stage_menu):
+		return
+	_stage_menu = StageSelectLib.new(can_cancel)
+	add_child(_stage_menu)
+	_stage_menu.chosen.connect(_on_stage_chosen)
+	if _local:
+		_local.input_enabled = false
+	_stage_menu.tree_exited.connect(func() -> void:
+		if _local and not _finished:
+			_local.input_enabled = true)
+
+
+func _on_stage_chosen(index: int) -> void:
+	_ensure_level(index)
+	_reset_to_start()
+	if _local:
+		_local.finished = false
+		_local.input_enabled = true
+	_race_time = 0.0
+	_timing = false
+	_finished = false
+	banner.text = ""
 
 
 func _on_race_event(phase: String, payload: Dictionary) -> void:
@@ -139,7 +191,9 @@ func _ensure_level(idx: int) -> void:
 	if idx == _current_level:
 		return
 	_current_level = idx
-	level.load_level(Levels.ALL[idx % Levels.ALL.size()])
+	var data: Dictionary = Levels.ALL[idx % Levels.ALL.size()]
+	level.load_level(data)
+	_build_backdrop(str(data.get("backdrop", "city")))
 	Net.local_pos = level.start_pos
 	if _local:
 		_reset_to_start()
@@ -173,8 +227,20 @@ func _physics_process(delta: float) -> void:
 	if Net.is_server:
 		info.text = "SERVER · players=%d" % Net.states.size()
 		return
+	if _shot_path != "":
+		_shot_t += delta
+		if _shot_t > _shot_delay:
+			get_viewport().get_texture().get_image().save_png(_shot_path)
+			print("[shot] saved %s" % _shot_path)
+			get_tree().quit()
+			return
 	if _local:
 		Net.local_pos = _local.global_position
+		if _tower_spin != null and _tower_layer.visible:
+			var sx := level.start_pos.x
+			var fx := level.finish_pos.x
+			var p := clampf((_local.global_position.x - sx) / maxf(fx - sx, 1.0), 0.0, 1.0)
+			_tower_spin.frame = int(p * 24.0 * 2.0) % 24   # ~2 turns over the climb
 		# Free-run mode starts timing on first movement; race mode is gated by the GO event.
 		if not _race_mode and not _timing and not _finished and absf(_local.velocity.x) > 1.0:
 			_timing = true
@@ -233,7 +299,7 @@ func _on_finish() -> void:
 		Net.report_finish(int(_race_time * 1000.0))
 		banner.text = "FINISHED  " + _format_time(_race_time)
 	else:
-		banner.text = "FINISH!  " + _format_time(_race_time)
+		banner.text = "FINISH!  %s\nENTER: next stage     R: retry" % _format_time(_race_time)
 	print("[FINISH] time=%s" % _format_time(_race_time))
 
 
@@ -242,94 +308,198 @@ func _format_time(t: float) -> String:
 	return "%d:%02d.%03d" % [total_ms / 60000, (total_ms / 1000) % 60, total_ms % 1000]
 
 
-func _build_skyline() -> void:
-	var pb := ParallaxBackground.new()
-	add_child(pb)
-	move_child(pb, 0)
-	_add_stars(pb)
-	_add_moon(pb)
-	_add_sky_layer(pb, 0.2, Color(0.05, 0.05, 0.13), 70, 7)
-	_add_sky_layer(pb, 0.45, Color(0.08, 0.06, 0.18), 130, 11)
+const THEME_SKY := {
+	"city": [Color8(7, 8, 22), Color8(24, 16, 44)],
+	"town": [Color8(150, 150, 174), Color8(232, 202, 184)],
+	"lake": [Color8(70, 140, 220), Color8(175, 210, 230)],
+	"terracotta": [Color8(110, 140, 190), Color8(245, 205, 150)],
+	"brick": [Color8(150, 155, 165), Color8(202, 202, 206)],
+	"library": [Color8(70, 52, 34), Color8(120, 92, 56)],
+	"lunar": [Color8(5, 5, 12), Color8(12, 12, 22)],
+	"highland": [Color8(92, 150, 210), Color8(192, 216, 236)],
+	"bay": [Color8(70, 150, 225), Color8(182, 216, 236)],
+	"tower": [Color8(40, 55, 95), Color8(235, 150, 70)],
+}
 
 
-func _add_stars(pb: ParallaxBackground) -> void:
-	var layer := ParallaxLayer.new()
-	layer.motion_scale = Vector2(0.08, 0.08)
-	pb.add_child(layer)
-	for i in range(180):
-		var sx := float((i * 167) % int(bounds_w()))
-		var sy := float((i * 89) % 380)
-		var s := ColorRect.new()
-		var b := 0.5 + float(i % 5) * 0.1
-		s.size = Vector2(2, 2)
-		s.position = Vector2(sx, sy)
-		s.color = Color(b, b, b * 1.1, 0.9)
-		layer.add_child(s)
+func _build_backdrop(theme: String) -> void:
+	# 2.5D parallax built off the main thread so transitions don't hitch. On a theme change the
+	# previous stage's layers are dropped immediately and the new theme's sky is shown at once, so
+	# a stage never renders mixed with the previous one; detailed depth layers mount ~2s later.
+	_bg_want_theme = theme
+	_set_tower(theme == "tower")
+	_set_music(theme)
+	if theme == _backdrop_theme and _bg != null:
+		return
+	if _bg != null:
+		_bg.queue_free()
+		_bg = null
+	_ensure_sky_rect()
+	_sky_rect.texture = _placeholder_sky(theme)
+	if _bg_busy:
+		return
+	_start_backdrop_build(theme)
 
 
-func _add_moon(pb: ParallaxBackground) -> void:
-	var layer := ParallaxLayer.new()
-	layer.motion_scale = Vector2(0.04, 0.04)
-	pb.add_child(layer)
-	var glow := _disc(70.0, Color(0.7, 0.8, 1.0, 0.10))
-	glow.position = Vector2(960, 150)
-	layer.add_child(glow)
-	var moon := _disc(46.0, Color(0.86, 0.9, 0.98, 1.0))
-	moon.position = Vector2(960, 150)
-	layer.add_child(moon)
-	var crater := _disc(40.0, Color(0.80, 0.85, 0.95, 1.0))
-	crater.position = Vector2(972, 142)
-	layer.add_child(crater)
+func _ensure_sky_rect() -> void:
+	if _sky_rect != null:
+		return
+	var skybg := $Sky.get_node_or_null("SkyBG")
+	if skybg:
+		skybg.queue_free()
+	_sky_rect = TextureRect.new()
+	_sky_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sky_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_sky_rect.stretch_mode = TextureRect.STRETCH_SCALE
+	_sky_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	$Sky.add_child(_sky_rect)
 
 
-func _disc(radius: float, color: Color) -> Polygon2D:
-	var poly := PackedVector2Array()
-	for a in range(20):
-		var ang := TAU * float(a) / 20.0
-		poly.append(Vector2(cos(ang), sin(ang)) * radius)
-	var p := Polygon2D.new()
-	p.polygon = poly
-	p.color = color
-	return p
+func _placeholder_sky(theme: String) -> ImageTexture:
+	# instant 2-colour sky gradient for the new theme while its full backdrop builds
+	var cols: Array = THEME_SKY.get(theme, THEME_SKY["city"])
+	var img := Image.create(4, 128, false, Image.FORMAT_RGBA8)
+	for y in range(128):
+		var c: Color = (cols[0] as Color).lerp(cols[1] as Color, float(y) / 127.0)
+		img.fill_rect(Rect2i(0, y, 4, 1), c)
+	return ImageTexture.create_from_image(img)
+
+
+func _set_music(theme: String) -> void:
+	# Per-stage looping background music (one original track per theme). Tracks are added over
+	# time; a theme with no track plays nothing.
+	if theme == _music_theme:
+		return
+	if _music == null:
+		_music = AudioStreamPlayer.new()
+		_music.volume_db = -7.0
+		add_child(_music)
+	var path := "res://audio/music/%s.wav" % theme
+	if not ResourceLoader.exists(path):
+		_music.stop()
+		_music_theme = ""
+		return
+	var s := load(path)
+	if s is AudioStreamWAV:
+		s.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		s.loop_begin = 0
+		s.loop_end = int(s.get_length() * float(s.mix_rate))
+	_music.stream = s
+	_music.play()
+	_music_theme = theme
+
+
+func _set_tower(on: bool) -> void:
+	# The spire stage's signature: a colossal tower looming behind the climb that turns as the
+	# player ascends (frame advanced from progress in _physics_process). Behind the play field.
+	if on and _tower_spin == null:
+		var tex := load("res://assets/tower_spin.png") as Texture2D
+		if tex == null:
+			return
+		_tower_layer = CanvasLayer.new()
+		_tower_layer.layer = -4
+		add_child(_tower_layer)
+		_tower_spin = Sprite2D.new()
+		_tower_spin.texture = tex
+		_tower_spin.hframes = 24
+		_tower_spin.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		_tower_spin.position = Vector2(640, 360)
+		_tower_spin.scale = Vector2(1.25, 1.25)
+		_tower_layer.add_child(_tower_spin)
+	if _tower_layer != null:
+		_tower_layer.visible = on
+
+
+func _start_backdrop_build(theme: String) -> void:
+	_bg_busy = true
+	if OS.has_feature("web"):
+		# The web client is exported single-threaded (see docs/DECISIONS.md D4), where a
+		# background Thread never runs its worker — so the skyline would never mount. Build
+		# it inline instead. Costs a one-time hitch at stage load; _backdrop_ready guards on
+		# the null _bg_thread.
+		_backdrop_ready(theme, Backdrop.new().build(theme, bounds_w(), 1280, 720))
+		return
+	_bg_thread = Thread.new()
+	_bg_thread.start(_backdrop_worker.bind(theme, bounds_w()))
+
+
+func _backdrop_worker(theme: String, level_w: float) -> void:
+	# Runs on a background thread: paints the layer Images (no scene-tree access).
+	var data := Backdrop.new().build(theme, level_w, 1280, 720)
+	call_deferred("_backdrop_ready", theme, data)
+
+
+func _backdrop_ready(theme: String, data: Dictionary) -> void:
+	if _bg_thread != null:
+		_bg_thread.wait_to_finish()
+		_bg_thread = null
+	_bg_busy = false
+	_mount_backdrop(data)
+	_backdrop_theme = theme
+	if _bg_want_theme != theme:
+		_start_backdrop_build(_bg_want_theme)   # a newer theme was requested mid-build
+
+
+func _mount_backdrop(data: Dictionary) -> void:
+	# Main thread: turn the painted Images into textures + ParallaxLayers.
+	if _bg != null:
+		_bg.queue_free()
+	_ensure_sky_rect()
+	_sky_rect.texture = ImageTexture.create_from_image(data["sky"])
+	_bg = ParallaxBackground.new()
+	_bg.layer = -5
+	add_child(_bg)
+	var horizon := level.bounds.end.y
+	var left := level.bounds.position.x
+	for ld in data["layers"]:
+		var layer := ParallaxLayer.new()
+		var m: float = ld["motion"]
+		layer.motion_scale = Vector2(m, m)
+		var spr := Sprite2D.new()
+		spr.texture = ImageTexture.create_from_image(ld["image"])
+		spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		spr.centered = false
+		var top: float = ld["top"]
+		if bool(ld.get("anchor_bottom", false)):
+			top = horizon - float((ld["image"] as Image).get_height())
+		spr.position = Vector2(left, top)
+		layer.add_child(spr)
+		_bg.add_child(layer)
+
+
+func _exit_tree() -> void:
+	if _bg_thread != null:
+		_bg_thread.wait_to_finish()
+		_bg_thread = null
 
 
 func bounds_w() -> float:
 	return maxf(level.bounds.size.x, 1.0)
 
 
-func _add_sky_layer(pb: ParallaxBackground, scale: float, color: Color, seedn: int, count: int) -> void:
-	var layer := ParallaxLayer.new()
-	layer.motion_scale = Vector2(scale, scale)
-	pb.add_child(layer)
-	var base_y := 820.0
-	var x := -200.0
-	for i in range(count * 6):
-		var w := 70.0 + float((i * seedn + 13) % 140)
-		var h := 140.0 + float((i * 53 + seedn * 7) % 360)
-		var b := ColorRect.new()
-		b.position = Vector2(x, base_y - h)
-		b.size = Vector2(w, h)
-		b.color = color
-		layer.add_child(b)
-		# a couple of lit neon windows
-		var win_color := Color(0.0, 0.95, 1.0, 0.5) if i % 2 == 0 else Color(1.0, 0.3, 0.7, 0.5)
-		for k in range(3):
-			var win := ColorRect.new()
-			win.size = Vector2(6, 6)
-			win.position = Vector2(x + 14 + (k * 18 % int(maxf(w - 20, 10))), base_y - h + 20 + k * 26)
-			win.color = win_color
-			layer.add_child(win)
-		x += w + 30.0
-
-
 func _input(event: InputEvent) -> void:
-	# R restarts the run locally — only in free-run mode (race resets are server-driven).
-	if _race_mode:
+	# Free-run only (race resets are server-driven): R retries the stage; after finishing,
+	# ENTER/SPACE advances to the next stage (cycling all courses, swapping backdrop + music).
+	if _race_mode or _local == null:
 		return
-	if event is InputEventKey and event.pressed and event.keycode == KEY_R and _local:
+	if not (event is InputEventKey and event.pressed):
+		return
+	var key: int = (event as InputEventKey).keycode
+	if key == KEY_TAB:
+		_open_stage_select(true)            # in-run stage menu (Esc to close)
+		return
+	if key == KEY_R:
 		_local.respawn_pos = level.start_pos
 		_local.global_position = level.start_pos
 		_local.respawn()
+		_local.finished = false
+		_race_time = 0.0
+		_timing = false
+		_finished = false
+		banner.text = ""
+	elif _finished and (key == KEY_ENTER or key == KEY_KP_ENTER or key == KEY_SPACE):
+		_ensure_level((_current_level + 1) % Levels.ALL.size())
+		_reset_to_start()
 		_local.finished = false
 		_race_time = 0.0
 		_timing = false

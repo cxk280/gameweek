@@ -24,6 +24,25 @@ const CHECK_GOLD := Color(1.0, 0.85, 0.2)
 const FINISH_COLOR := Color(1.0, 0.85, 0.1)
 const HAZARD_COLOR := Color(1.0, 0.25, 0.35)
 
+# Per-theme platform look: dark body fills + bright top-edge accent colours that read against
+# each stage's backdrop. Keyed by the level's "backdrop" theme; falls back to city.
+const PLATFORM_STYLES := {
+	"city":       {"fill": Color8(15, 18, 36), "fill2": Color8(23, 26, 46), "edges": NEON},
+	"town":       {"fill": Color8(26, 18, 12), "fill2": Color8(38, 27, 18), "edges": [Color8(255, 180, 90), Color8(255, 140, 70)]},
+	"lake":       {"fill": Color8(16, 26, 30), "fill2": Color8(22, 34, 40), "edges": [Color8(120, 230, 240), Color8(255, 200, 110)]},
+	"terracotta": {"fill": Color8(34, 22, 16), "fill2": Color8(46, 30, 22), "edges": [Color8(240, 140, 80), Color8(245, 225, 190)]},
+	"brick":      {"fill": Color8(28, 18, 18), "fill2": Color8(40, 26, 24), "edges": [Color8(255, 180, 90), Color8(220, 90, 70)]},
+	"tower":      {"fill": Color8(14, 12, 16), "fill2": Color8(22, 18, 24), "edges": [Color8(255, 70, 70), Color8(150, 130, 110)]},
+	"lunar":      {"fill": Color8(16, 18, 30), "fill2": Color8(24, 26, 40), "edges": [Color8(80, 240, 255), Color8(235, 235, 245)]},
+	"highland":   {"fill": Color8(30, 26, 20), "fill2": Color8(42, 36, 28), "edges": [Color8(245, 230, 200), Color8(220, 90, 60)]},
+	"bay":        {"fill": Color8(16, 24, 30), "fill2": Color8(22, 32, 40), "edges": [Color8(90, 220, 230), Color8(255, 225, 140)]},
+	"library":    {"fill": Color8(26, 18, 12), "fill2": Color8(36, 26, 16), "edges": [Color8(245, 205, 110), Color8(255, 235, 180)]},
+}
+
+var _pfill := FILL
+var _pfill2 := FILL2
+var _edges: Array = NEON
+
 var start_pos := Vector2.ZERO
 var finish_pos := Vector2.ZERO
 var kill_y := 9999.0
@@ -37,9 +56,13 @@ func load_level(data: Dictionary) -> void:
 	finish_pos = data["finish"]
 	bounds = data["bounds"]
 	kill_y = bounds.end.y - 30.0
+	var style: Dictionary = PLATFORM_STYLES.get(str(data.get("backdrop", "city")), PLATFORM_STYLES["city"])
+	_pfill = style["fill"]
+	_pfill2 = style["fill2"]
+	_edges = style["edges"]
 	var i := 0
 	for r in data["platforms"]:
-		_add_platform(r, NEON[i % NEON.size()], i)
+		_add_platform(r, _edges[i % _edges.size()], i)
 		i += 1
 	for h in data.get("hazards", []):
 		_add_hazard(h)
@@ -62,8 +85,8 @@ func _add_platform(r: Rect2, edge: Color, idx: int) -> void:
 	shape.position = r.position + r.size * 0.5
 	body.add_child(shape)
 
-	_rect(body, r.position, r.size, FILL)
-	_rect(body, r.position + Vector2(0, r.size.y * 0.5), Vector2(r.size.x, r.size.y * 0.5), FILL2)
+	_rect(body, r.position, r.size, _pfill)
+	_rect(body, r.position + Vector2(0, r.size.y * 0.5), Vector2(r.size.x, r.size.y * 0.5), _pfill2)
 	_rect(body, r.position - Vector2(0, 6), Vector2(r.size.x, 8), Color(edge.r, edge.g, edge.b, 0.22))
 	_rect(body, r.position, Vector2(r.size.x, 3), edge)
 	_add_props(body, r, edge, idx)
