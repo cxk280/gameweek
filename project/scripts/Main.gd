@@ -412,6 +412,13 @@ func _set_tower(on: bool) -> void:
 
 func _start_backdrop_build(theme: String) -> void:
 	_bg_busy = true
+	if OS.has_feature("web"):
+		# The web client is exported single-threaded (see docs/DECISIONS.md D4), where a
+		# background Thread never runs its worker — so the skyline would never mount. Build
+		# it inline instead. Costs a one-time hitch at stage load; _backdrop_ready guards on
+		# the null _bg_thread.
+		_backdrop_ready(theme, Backdrop.new().build(theme, bounds_w(), 1280, 720))
+		return
 	_bg_thread = Thread.new()
 	_bg_thread.start(_backdrop_worker.bind(theme, bounds_w()))
 
