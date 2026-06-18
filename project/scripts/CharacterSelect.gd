@@ -8,10 +8,32 @@ signal chosen(char_id: String)
 
 const PREVIEW_SCALE := 5
 
+var _presence: Label
+
 
 func _ready() -> void:
 	layer = 50
 	_build()
+
+
+func _process(_dt: float) -> void:
+	# Live presence so the player sees, before picking, that this is real multiplayer.
+	if _presence == null:
+		return
+	match Net.link_state:
+		"online":
+			var others := Net.others_online()
+			if others > 0:
+				_presence.text = "%d other player%s online now — pick a runner to race them" % [others, "" if others == 1 else "s"]
+			else:
+				_presence.text = "Connected — pick a runner to enter the lobby (invite a friend to race)"
+			_presence.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55))
+		"connecting":
+			_presence.text = "Connecting to the race server..."
+			_presence.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
+		_:
+			_presence.text = "Offline — you'll play a solo time trial"
+			_presence.add_theme_color_override("font_color", Color(0.72, 0.74, 0.82))
 
 
 func _build() -> void:
@@ -43,8 +65,15 @@ func _build() -> void:
 	tagline.add_theme_color_override("font_color", Color(0.0, 0.95, 1.0))
 	col.add_child(tagline)
 
+	_presence = Label.new()
+	_presence.text = "Connecting to the race server..."
+	_presence.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_presence.add_theme_font_size_override("font_size", 18)
+	_presence.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
+	col.add_child(_presence)
+
 	var title := Label.new()
-	title.text = "▾  SELECT YOUR RUNNER  ▾"
+	title.text = "SELECT YOUR RUNNER"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 26)
 	title.add_theme_color_override("font_color", Color(0.7, 0.72, 0.85))
